@@ -230,6 +230,21 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_WPAN_PHY_CAPS] = { .type = NLA_NESTED },
 
 	[NL802154_ATTR_SUPPORTED_COMMANDS] = { .type = NLA_NESTED },
+
+	[NL802154_ATTR_SCAN_TYPE] = { .type = NLA_U8 },
+	[NL802154_ATTR_CHANNEL_MASK] = { .type = NLA_U32 },
+	[NL802154_ATTR_DURATION] = { .type = NLA_U8 },
+	[NL802154_ATTR_CHANNEL_PAGE] = { .type = NLA_U8 },
+
+	[NL802154_ATTR_SECURITY_LEVEL] = { .type = NLA_U8 },
+	[NL802154_ATTR_KEY_ID_MODE] = { .type = NLA_U8 },
+	[NL802154_ATTR_KEY_SOURCE] = { .type = NLA_NESTED },
+	[NL802154_ATTR_KEY_INDEX] = { .type = NLA_U8 },
+
+	[NL802154_ATTR_STATUS] = { .type = NLA_U8 },
+
+	[NL802154_ATTR_SCAN_RESULT_LIST_SIZE] = { .type = NLA_NESTED },
+	[NL802154_ATTR_ENERGY_DETECT_LIST] = { .type = NLA_NESTED },
 };
 
 /* message building helper */
@@ -1042,6 +1057,39 @@ static int nl802154_set_lbt_mode(struct sk_buff *skb, struct genl_info *info)
 	return rdev_set_lbt_mode(rdev, wpan_dev, mode);
 }
 
+static int nl802154_get_ed_scan(struct sk_buff *skb, struct genl_info *info)
+{
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	u8 scan_type, duration, security_level, key_id_mode, key_index;
+	u32 channel_mask;
+	u8 key_source;
+
+	if (netif_running(dev))
+		return -EBUSY;
+
+	if(!info->attrs[NL802154_ATTR_SCAN_TYPE] ||
+		!info->attrs[NL802154_ATTR_CHANNEL_MASK] ||
+		!info->attrs[NL802154_ATTR_DURATION] ||
+		!info->attrs[NL802154_ATTR_SECURITY_LEVEL] ||
+		!info->attrs[NL802154_ATTR_KEY_ID_MODE] ||
+		!info->attrs[NL802154_ATTR_KEY_SOURCE] ||
+		!info->attrs[NL802154_ATTR_KEY_INDEX])
+		return -EINVAL;
+
+	scan_type = !!nla_get_u8(info->attrs[NL802154_ATTR_SCAN_TYPE]);
+	channel_mask = !!nla_get_u32(info->attrs[NL802154_ATTR_CHANNEL_MASK]);
+	duration = !!nla_get_u8(info->attrs[NL802154_ATTR_DURATION]);
+	security_level = !!nla_get_u8(info->attrs[NL802154_ATTR_SECURITY_LEVEL]);
+	key_id_mode = !!nla_get_u8(info->attrs[NL802154_ATTR_KEY_ID_MODE]);
+	key_source = !!nla_get_u8(info->attrs[NL802154_ATTR_KEY_SOURCE]);
+	key_index = !!nla_get_u8(info->attrs[NL802154_ATTR_KEY_INDEX]);
+
+	return rdev_get_ed_scan(rdev, wpan_dev, scan_type, channel_mask,
+			duration, security_level, key_id_mode, key_source, key_index);
+}
+
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
 #define NL802154_FLAG_NEED_RTNL		0x04
@@ -1243,6 +1291,14 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_SET_LBT_MODE,
 		.doit = nl802154_set_lbt_mode,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_GET_ED_SCAN,
+		.doit = nl802154_get_ed_scan,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
