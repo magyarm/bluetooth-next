@@ -23,6 +23,7 @@
 #include "../../include/linux/license.h"
 #include "../../include/linux/export.h"
 
+/*
 enum {
   R_ARM_ABS32,
   R_ARM_PC24,
@@ -31,6 +32,7 @@ enum {
   R_MIPS_26,
   R_MIPS_32,
 };
+*/
 
 /* Are we using CONFIG_MODVERSIONS? */
 static int modversions = 0;
