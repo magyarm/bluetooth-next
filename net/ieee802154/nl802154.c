@@ -1061,6 +1061,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     u8 security_level;
     u8 key_id_mode;
     // uint8_t key_source[4 + 1] = {};
+    char null_key_source = { '\0', '\0', '\0', '\0', '\0' };
     char *key_source;
     u8 key_index;
 
@@ -1077,13 +1078,15 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     struct sk_buff *reply;
     void *hdr;
 
+    printk( KERN_INFO "skb:%p, info: %p\n", skb, info );
 	rdev = info->user_ptr[0];
 	dev = info->user_ptr[1];
-	wpan_dev = dev->ieee802154_ptr;
+    printk( KERN_INFO "rdev: %p, dev: %p\n", rdev, dev );
 
-	if ( netif_running( dev ) ) {
-		return -EBUSY;
-	}
+	// wpan_dev = dev->ieee802154_ptr; // dev not instantiated yet (oops: null pointer deref)
+//	if ( netif_running( dev ) ) {
+//		return -EBUSY;
+//	}
 
     scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
     scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_CHANNEL_MASK ] );
@@ -1094,7 +1097,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     key_source = (char *)nla_data( info->attrs[ NL802154_ATTR_KEY_SOURCE ] );
     key_index = nla_get_u8( info->attrs[ NL802154_ATTR_KEY_INDEX ] );
 
-    dev_dbg( & dev->dev,
+    printk( KERN_INFO
         "scan_type: %u, "
         "scan_channels: %08x, "
         "scan_duration: %u, "
@@ -1102,7 +1105,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
         "security_level: %u, "
         "key_id_mode: %u, "
         "key_source: %08x, "
-        "key_index: %u",
+        "key_index: %u\n",
         scan_type,
         scan_channels,
         scan_duration,
@@ -1142,7 +1145,6 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
 
 free_reply:
     nlmsg_free( reply );
-
 out:
     return r;
 }
@@ -1358,7 +1360,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.doit = nl802154_get_ed_scan,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 };
