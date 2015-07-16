@@ -123,6 +123,8 @@ rdev_set_pan_id(struct cfg802154_registered_device *rdev,
 {
 	int ret;
 
+	printk( KERN_INFO "rdev_set_pan_id: %d\n", pan_id );
+
 	trace_802154_rdev_set_pan_id(&rdev->wpan_phy, wpan_dev, pan_id);
 	ret = rdev->ops->set_pan_id(&rdev->wpan_phy, wpan_dev, pan_id);
 	trace_802154_rdev_return_int(&rdev->wpan_phy, ret);
@@ -198,12 +200,15 @@ rdev_set_lbt_mode(struct cfg802154_registered_device *rdev,
 static inline int
 rdev_get_ed_scan(struct cfg802154_registered_device *rdev,
 		  struct wpan_dev *wpan_dev, u8 scan_type, u32 channel_mask,
-		  u8 duration, u8 security_level, u8 key_id_mode, u8 key_source,
+		  u8 duration, u8 channel_page, u8 security_level, u8 key_id_mode, u8 key_source,
 		  u8 key_index)
 {
 	int ret = 0;
 
 	printk("STUB: Netlink message to start ED scan received and parsed\n");
+
+	ret = rdev->ops->get_ed_scan(&rdev->wpan_phy,
+			wpan_dev, channel_page, duration);
 
 	return ret;
 }

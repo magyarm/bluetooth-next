@@ -284,4 +284,22 @@ drv_set_promiscuous_mode(struct ieee802154_local *local, bool on)
 	return ret;
 }
 
+static inline int
+drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
+{
+	int ret;
+
+	if (!local->ops->ed) {
+		WARN_ON(1);
+		return -EOPNOTSUPP;
+	}
+
+	might_sleep();
+
+	trace_802154_drv_set_channel(local, page, duration);
+	ret = local->ops->ed( &local->hw, level);
+	trace_802154_drv_return_int(local, ret);
+	return ret;
+}
+
 #endif /* __MAC802154_DRIVER_OPS */
