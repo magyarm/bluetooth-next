@@ -192,8 +192,6 @@ ieee802154_set_pan_id(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	ASSERT_RTNL();
 
-	printk( KERN_INFO "in ieee802154 set pan id\n" );
-
 	if (wpan_dev->pan_id == pan_id)
 		return 0;
 
@@ -285,8 +283,6 @@ ieee802154_get_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	ASSERT_RTNL();
 
 	drv_ed_scan( local, level, page, duration );
-
-	printk( "ED Scan ieee802154_get_ed_scan" );
 
 	return ret;
 }
