@@ -230,6 +230,21 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_WPAN_PHY_CAPS] = { .type = NLA_NESTED },
 
 	[NL802154_ATTR_SUPPORTED_COMMANDS] = { .type = NLA_NESTED },
+
+    [NL802154_ATTR_SCAN_TYPE] = { .type = NLA_U8, },
+    [NL802154_ATTR_CHANNEL_MASK] = { .type = NLA_U32, },
+    [NL802154_ATTR_DURATION] = { .type = NLA_U8, },
+
+    [NL802154_ATTR_SECURITY_LEVEL] = { .type = NLA_U8, },
+    [NL802154_ATTR_KEY_ID_MODE] = { .type = NLA_U8, },
+    [NL802154_ATTR_KEY_SOURCE] = { .type = NLA_NUL_STRING, .len = 8+1, },
+    [NL802154_ATTR_KEY_INDEX] = { .type = NLA_U8, },
+
+    [NL802154_ATTR_STATUS] = { .type = NLA_U8, },
+
+    [NL802154_ATTR_SCAN_RESULT_LIST_SIZE] = { .type = NLA_U8, },
+    [NL802154_ATTR_ENERGY_DETECT_LIST] =  { .type = NLA_NUL_STRING, .len = 32+1, },
+    [NL802154_ATTR_DETECTED_CATEGORY] = { .type = NLA_U8, },
 };
 
 /* message building helper */
@@ -458,6 +473,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
+	CMD(get_ed_scan, GET_ED_SCAN);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1061,7 +1077,6 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     u8 security_level;
     u8 key_id_mode;
     // uint8_t key_source[4 + 1] = {};
-    char null_key_source = { '\0', '\0', '\0', '\0', '\0' };
     char *key_source;
     u8 key_index;
 
@@ -1073,20 +1088,25 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     u8 detected_category;
 
 	struct cfg802154_registered_device *rdev;
-	struct net_device *dev;
-	struct wpan_dev *wpan_dev;
     struct sk_buff *reply;
     void *hdr;
 
     printk( KERN_INFO "skb:%p, info: %p\n", skb, info );
-	rdev = info->user_ptr[0];
-	dev = info->user_ptr[1];
-    printk( KERN_INFO "rdev: %p, dev: %p\n", rdev, dev );
+    rdev = info->user_ptr[0];
+    printk( KERN_INFO "rdev: %p\n", rdev );
 
-	// wpan_dev = dev->ieee802154_ptr; // dev not instantiated yet (oops: null pointer deref)
-//	if ( netif_running( dev ) ) {
-//		return -EBUSY;
-//	}
+    if ( ! (
+            info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
+            info->attrs[ NL802154_ATTR_CHANNEL_MASK ] &&
+            info->attrs[ NL802154_ATTR_DURATION ] &&
+            info->attrs[ NL802154_ATTR_PAGE ] &&
+            info->attrs[ NL802154_ATTR_SECURITY_LEVEL ] &&
+            info->attrs[ NL802154_ATTR_KEY_ID_MODE ] &&
+            info->attrs[ NL802154_ATTR_KEY_INDEX ]
+    ) ) {
+        r = -EINVAL;
+        goto out;
+    }
 
     scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
     scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_CHANNEL_MASK ] );
@@ -1130,7 +1150,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
 
     status = 0; // XXX: 802154 "SUCCESS"
     unscanned_channels = 0;
-    result_list_size = 16; // Channels 11 through 26
+    result_list_size = 32;
     energy_detect_list = (char *) ed_list;
     detected_category = 2;
 
@@ -1138,10 +1158,15 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type );
     nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page );
     nla_put_u32( reply, NL802154_ATTR_CHANNEL_MASK, unscanned_channels );
-    nla_put_string( reply, NL802154_ATTR_CHANNEL_MASK, energy_detect_list );
+    nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size );
+    nla_put_string( reply, NL802154_ATTR_ENERGY_DETECT_LIST, energy_detect_list );
     nla_put_u8( reply, NL802154_ATTR_DETECTED_CATEGORY, detected_category );
 
-    return genlmsg_reply( reply, info );
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );;
+    printk( KERN_INFO "returning %d\n", r );
+    goto out;
 
 free_reply:
     nlmsg_free( reply );
