@@ -1091,7 +1091,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     struct sk_buff *reply;
     void *hdr;
 
-
+    printk( KERN_INFO "skb:%p, info: %p\n", skb, info );
     rdev = info->user_ptr[0];
     printk( KERN_INFO "rdev: %p\n", rdev );
 
