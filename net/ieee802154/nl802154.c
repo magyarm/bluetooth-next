@@ -1078,13 +1078,13 @@ static int nl802154_get_ed_scan(struct sk_buff *skb, struct genl_info *info)
 		!info->attrs[NL802154_ATTR_KEY_INDEX])
 		return -EINVAL;
 
-	scan_type = !!nla_get_u8(info->attrs[NL802154_ATTR_SCAN_TYPE]);
-	channel_mask = !!nla_get_u32(info->attrs[NL802154_ATTR_CHANNEL_MASK]);
-	duration = !!nla_get_u8(info->attrs[NL802154_ATTR_DURATION]);
-	security_level = !!nla_get_u8(info->attrs[NL802154_ATTR_SECURITY_LEVEL]);
-	key_id_mode = !!nla_get_u8(info->attrs[NL802154_ATTR_KEY_ID_MODE]);
-	key_source = !!nla_get_u8(info->attrs[NL802154_ATTR_KEY_SOURCE]);
-	key_index = !!nla_get_u8(info->attrs[NL802154_ATTR_KEY_INDEX]);
+	scan_type = nla_get_u8(info->attrs[NL802154_ATTR_SCAN_TYPE]);
+	channel_mask = nla_get_u32(info->attrs[NL802154_ATTR_CHANNEL_MASK]);
+	duration = nla_get_u8(info->attrs[NL802154_ATTR_DURATION]);
+	security_level = nla_get_u8(info->attrs[NL802154_ATTR_SECURITY_LEVEL]);
+	key_id_mode = nla_get_u8(info->attrs[NL802154_ATTR_KEY_ID_MODE]);
+	key_source = nla_get_u8(info->attrs[NL802154_ATTR_KEY_SOURCE]);
+	key_index = nla_get_u8(info->attrs[NL802154_ATTR_KEY_INDEX]);
 
 	return rdev_get_ed_scan(rdev, wpan_dev, scan_type, channel_mask,
 			duration, security_level, key_id_mode, key_source, key_index);
