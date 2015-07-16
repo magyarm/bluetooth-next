@@ -1091,9 +1091,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     struct sk_buff *reply;
     void *hdr;
 
-    printk( KERN_INFO "skb:%p, info: %p\n", skb, info );
     rdev = info->user_ptr[0];
-    printk( KERN_INFO "rdev: %p\n", rdev );
 
     if ( ! (
             info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1116,25 +1114,6 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     key_id_mode = nla_get_u8( info->attrs[ NL802154_ATTR_KEY_ID_MODE ] );
     key_source = (char *)nla_data( info->attrs[ NL802154_ATTR_KEY_SOURCE ] );
     key_index = nla_get_u8( info->attrs[ NL802154_ATTR_KEY_INDEX ] );
-
-    printk( KERN_INFO
-        "scan_type: %u, "
-        "scan_channels: %08x, "
-        "scan_duration: %u, "
-        "channel_page: %u, "
-        "security_level: %u, "
-        "key_id_mode: %u, "
-        "key_source: %08x, "
-        "key_index: %u\n",
-        scan_type,
-        scan_channels,
-        scan_duration,
-        channel_page,
-        security_level,
-        key_id_mode,
-        *((u32 *)key_source),
-        key_index
-    );
 
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
@@ -1165,7 +1144,6 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     genlmsg_end( reply, hdr );
 
     r = genlmsg_reply( reply, info );;
-    printk( KERN_INFO "returning %d\n", r );
     goto out;
 
 free_reply:
