@@ -308,7 +308,7 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
         a_base_superframe_duration * symbol_duration_us *
         ( ( 1 << duration)  + 1 ) * 1000;
 
-	int i, j;
+	int i;
 	u32 channels;
 	u8 tmp_level;
 	u64 ns;
@@ -320,21 +320,26 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
 		return -EOPNOTSUPP;
 	}
 
+	printk( KERN_INFO "%s\n", __FUNCTION__ );
+
     channels = local->hw.phy->supported.channels[ page ];
+
+    printk( KERN_INFO "channels = %08x\n", channels );
 
     might_sleep();
 
-    for( i = 0, nchannels = 0; i < sizeof( channels ) * sizeof( u8 ); i++ ) {
+    for( i = 0, nchannels = 0; i < sizeof( channels ) * 8; i++ ) {
         if ( BIT( i ) & channels ) {
             nchannels++;
         }
     }
 
-    printk( KERN_INFO "scanning %u channels each with a duration in ns of %lu will take approximately %lu ns", nchannels, duration_ns, (u64)nchannels * duration_ns );
+    printk( KERN_INFO "There are %u channels\n", nchannels );
 
-    for( i = 0, j = 0; i < sizeof( channels ) * sizeof( u8 ); i++ ) {
+    for( i = 0; i < sizeof( channels ) * 8; i++ ) {
+        level[ i ] = 0;
         if ( BIT( i ) & channels ) {
-            level[ j ] = 0;
+            //printk( KERN_INFO "reading channel %u\n", i );
             for(
                 now = current_kernel_time(),
                     then = now,
@@ -347,15 +352,18 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
             ) {
                 ret = local->ops->ed( &local->hw, &tmp_level );
                 if ( 0 != ret ) {
+                    printk( KERN_INFO "failed to read channel %d\n", i );
                     goto out;
                 }
-                level[ j ] = tmp_level >= level[ j ] ? tmp_level : level[ j ];
+                level[ i ] = tmp_level >= level[ i ] ? tmp_level : level[ i ];
             }
-            j++;
+            //printk( KERN_INFO "read channel %u\n", i );
         }
     }
+    ret = 0;
 
 out:
+    printk( KERN_INFO "returning %d\n", ret );
     return ret;
 }
 
