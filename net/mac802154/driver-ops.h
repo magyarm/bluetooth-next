@@ -298,6 +298,9 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
 
 	trace_802154_drv_set_channel(local, page, duration);
 	ret = local->ops->ed( &local->hw, level);
+
+	printk( KERN_INFO "In drv_ed_scan \n" );
+
 	trace_802154_drv_return_int(local, ret);
 	return ret;
 }

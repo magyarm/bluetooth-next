@@ -379,8 +379,29 @@ static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
 	BUG_ON(!level);
-	*level = 0xbe;
-	return 0;
+
+	struct atusb *atusb = hw->priv;
+	int chan, rssi, ret = 0;
+	struct timeval t;
+
+	for (chan = 11; chan <= 26; chan++) {
+		ret = atusb_write_reg(atusb, RG_PHY_CC_CCA, channel);
+		/* 150 us, according to AVR2001 section 3.5 */
+		wait_for_interrupt(dsc, IRQ_PLL_LOCK, IRQ_PLL_LOCK, 1);
+
+		gettimeofday(&t, NULL);
+		rssi = atusb_read_reg(atusb, REG_PHY_RSSI) & RSSI_MASK;
+
+		t.tv_sec -= t0.tv_sec;
+		t.tv_usec -= t0.tv_usec;
+		printk("%d %f %d\n",
+				2405+(chan-11)*5,
+				(double) t.tv_sec+t.tv_usec/1000000.0,
+				-91+3*(rssi-1));
+		level[chan] = rssi;
+	}
+
+	return ret;
 }
 
 static int atusb_set_hw_addr_filt(struct ieee802154_hw *hw,

@@ -1088,6 +1088,8 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     u8 detected_category;
 
 	struct cfg802154_registered_device *rdev;
+	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
     struct sk_buff *reply;
     void *hdr;
 
@@ -1135,6 +1137,10 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
         *((u32 *)key_source),
         key_index
     );
+
+    r = rdev_get_ed_scan( rdev, wpan_dev, scan_type, scan_channels,
+   		 scan_duration, channel_page, security_level, key_id_mode, key_source,
+			 key_index);
 
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
@@ -1383,6 +1389,7 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_GET_ED_SCAN,
 		.doit = nl802154_get_ed_scan,
+		.dumpit = nl802154_get_ed_scan,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |

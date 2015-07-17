@@ -282,6 +282,8 @@ ieee802154_get_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	ASSERT_RTNL();
 
+	printk( KERN_INFO "In ieee802154_get_ed_scan \n" );
+
 	drv_ed_scan( local, level, page, duration );
 
 	return ret;

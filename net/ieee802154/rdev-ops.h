@@ -198,10 +198,12 @@ rdev_set_lbt_mode(struct cfg802154_registered_device *rdev,
 static inline int
 rdev_get_ed_scan(struct cfg802154_registered_device *rdev,
 		  struct wpan_dev *wpan_dev, u8 scan_type, u32 channel_mask,
-		  u8 duration, u8 channel_page, u8 security_level, u8 key_id_mode, u8 key_source,
+		  u8 duration, u8 channel_page, u8 security_level, u8 key_id_mode, char* key_source,
 		  u8 key_index)
 {
 	int ret = 0;
+
+	printk( KERN_INFO "In rdev_get_ed_scan \n" );
 
 	ret = rdev->ops->get_ed_scan(&rdev->wpan_phy, wpan_dev, channel_page, duration);
 
