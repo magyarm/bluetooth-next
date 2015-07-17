@@ -1062,14 +1062,8 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
 {
     int r;
 
-    static const unsigned char ed_list[] = {
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        0xff, 0xff, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        '\0',
-    };
-
+    int i;
+    unsigned char ed_list[32];
     u8 scan_type;
     __le32 scan_channels;
     u8 scan_duration;
@@ -1092,6 +1086,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     void *hdr;
 
     rdev = info->user_ptr[0];
+    memset( ed_list, 0xff, sizeof( ed_list ) );
 
     if ( ! (
             info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1133,6 +1128,18 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     energy_detect_list = (char *) ed_list;
     detected_category = 2;
 
+    r = rdev_get_ed_scan(rdev, NULL, ed_list, channel_page, scan_duration );
+    if ( r < 0 ) {
+        goto free_reply;
+    }
+
+    for( i = 0; i < ARRAY_SIZE( ed_list ); i++ ) {
+        if ( 0xff != ed_list[i] ) {
+            break;
+        }
+    }
+    result_list_size = i;
+
     nla_put_u8( reply, NL802154_ATTR_STATUS, status );
     nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type );
     nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page );
@@ -1143,7 +1150,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
 
     genlmsg_end( reply, hdr );
 
-    r = genlmsg_reply( reply, info );;
+    r = genlmsg_reply( reply, info );
     goto out;
 
 free_reply:

@@ -274,10 +274,9 @@ ieee802154_set_lbt_mode(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 static int
 ieee802154_get_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-			u8 page, u8 duration)
+			u8 *level, u8 page, u8 duration)
 {
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	u8 level[32];
 	int ret = 0;
 
 	ASSERT_RTNL();
