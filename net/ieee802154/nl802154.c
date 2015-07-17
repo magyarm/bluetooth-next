@@ -1062,14 +1062,8 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
 {
     int r;
 
-    static const unsigned char ed_list[] = {
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        0xff, 0xff, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        '\0',
-    };
-
+    int i;
+    unsigned char ed_list[32];
     u8 scan_type;
     __le32 scan_channels;
     u8 scan_duration;
@@ -1088,14 +1082,11 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     u8 detected_category;
 
 	struct cfg802154_registered_device *rdev;
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
     struct sk_buff *reply;
     void *hdr;
 
-    printk( KERN_INFO "skb:%p, info: %p\n", skb, info );
     rdev = info->user_ptr[0];
-    printk( KERN_INFO "rdev: %p\n", rdev );
+    memset( ed_list, 0xff, sizeof( ed_list ) );
 
     if ( ! (
             info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1119,29 +1110,6 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     key_source = (char *)nla_data( info->attrs[ NL802154_ATTR_KEY_SOURCE ] );
     key_index = nla_get_u8( info->attrs[ NL802154_ATTR_KEY_INDEX ] );
 
-    printk( KERN_INFO
-        "scan_type: %u, "
-        "scan_channels: %08x, "
-        "scan_duration: %u, "
-        "channel_page: %u, "
-        "security_level: %u, "
-        "key_id_mode: %u, "
-        "key_source: %08x, "
-        "key_index: %u\n",
-        scan_type,
-        scan_channels,
-        scan_duration,
-        channel_page,
-        security_level,
-        key_id_mode,
-        *((u32 *)key_source),
-        key_index
-    );
-
-    r = rdev_get_ed_scan( rdev, wpan_dev, scan_type, scan_channels,
-   		 scan_duration, channel_page, security_level, key_id_mode, key_source,
-			 key_index);
-
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
@@ -1160,6 +1128,18 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     energy_detect_list = (char *) ed_list;
     detected_category = 2;
 
+    r = rdev_get_ed_scan(rdev, NULL, ed_list, channel_page, scan_duration );
+    if ( r < 0 ) {
+        goto free_reply;
+    }
+
+    for( i = 0; i < ARRAY_SIZE( ed_list ); i++ ) {
+        if ( 0xff != ed_list[i] ) {
+            break;
+        }
+    }
+    result_list_size = i;
+
     nla_put_u8( reply, NL802154_ATTR_STATUS, status );
     nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type );
     nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page );
@@ -1170,8 +1150,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
 
     genlmsg_end( reply, hdr );
 
-    r = genlmsg_reply( reply, info );;
-    printk( KERN_INFO "returning %d\n", r );
+    r = genlmsg_reply( reply, info );
     goto out;
 
 free_reply:
@@ -1389,7 +1368,6 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_GET_ED_SCAN,
 		.doit = nl802154_get_ed_scan,
-		.dumpit = nl802154_get_ed_scan,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |

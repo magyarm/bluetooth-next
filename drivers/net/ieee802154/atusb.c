@@ -378,30 +378,30 @@ static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
-	BUG_ON(!level);
+    int r;
 
-	struct atusb *atusb = hw->priv;
-	int chan, rssi, ret = 0;
-	struct timeval t;
+    struct atusb *atusb = hw->priv;
+    struct device *dev = &atusb->usb_dev->dev;
 
-	for (chan = 11; chan <= 26; chan++) {
-		ret = atusb_write_reg(atusb, RG_PHY_CC_CCA, channel);
-		/* 150 us, according to AVR2001 section 3.5 */
-		wait_for_interrupt(dsc, IRQ_PLL_LOCK, IRQ_PLL_LOCK, 1);
-
-		gettimeofday(&t, NULL);
-		rssi = atusb_read_reg(atusb, REG_PHY_RSSI) & RSSI_MASK;
-
-		t.tv_sec -= t0.tv_sec;
-		t.tv_usec -= t0.tv_usec;
-		printk("%d %f %d\n",
-				2405+(chan-11)*5,
-				(double) t.tv_sec+t.tv_usec/1000000.0,
-				-91+3*(rssi-1));
-		level[chan] = rssi;
-	}
-
-	return ret;
+    BUG_ON(!level);
+    r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
+    if (0xff == r) {
+        r = atusb_write_reg(atusb, RG_PHY_ED_LEVEL, 0x00);
+        if (r < 0) {
+            goto out;
+        }
+        r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
+    }
+    if (r < 0 || r > 0x54) {
+        r = r < 0 ? r : -EINVAL;
+        goto out;
+    }
+    // valid values are [0x00,0x54]
+    // we need to scale to [0x00,0xff]
+    *level = r * 3;
+    r = 0;
+out:
+	return r;
 }
 
 static int atusb_set_hw_addr_filt(struct ieee802154_hw *hw,
