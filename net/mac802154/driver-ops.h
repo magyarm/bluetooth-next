@@ -289,17 +289,74 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
 {
 	int ret;
 
+	const u32 nsec_per_sec = 1000000000;
+    const u32 a_num_superframe_slots =
+        // 0 to 16, inclusive
+        16;
+    const u32 a_base_slot_duration =
+        // assuming that macBeaconOrder != 15 (i.e. no superframe)
+        60;
+    const u32 a_base_superframe_duration =
+        // 6.4.2, 802.15.4-2011
+        a_base_slot_duration * a_num_superframe_slots;
+    const u32 symbol_duration_us =
+        // 8.1.1, 802.15.4-2011
+        // typically 16 us for 2.4GHz DSS phy
+        local->hw.phy->symbol_duration;
+    const u64 duration_ns =
+        // 6.2.10.1, 802.15.4-2011
+        a_base_superframe_duration * symbol_duration_us *
+        ( ( 1 << duration)  + 1 ) * 1000;
+
+	int i, j;
+	u32 channels;
+	u8 tmp_level;
+	u64 ns;
+	u8 nchannels;
+	struct timespec now, then;
+
 	if (!local->ops->ed) {
 		WARN_ON(1);
 		return -EOPNOTSUPP;
 	}
 
-	might_sleep();
+    channels = local->hw.phy->supported.channels[ page ];
 
-	trace_802154_drv_set_channel(local, page, duration);
-	ret = local->ops->ed( &local->hw, level);
-	trace_802154_drv_return_int(local, ret);
-	return ret;
+    might_sleep();
+
+    for( i = 0, nchannels = 0; i < sizeof( channels ) * sizeof( u8 ); i++ ) {
+        if ( BIT( i ) & channels ) {
+            nchannels++;
+        }
+    }
+
+    printk( KERN_INFO "scanning %u channels each with a duration in ns of %lu will take approximately %lu ns", nchannels, duration_ns, (u64)nchannels * duration_ns );
+
+    for( i = 0, j = 0; i < sizeof( channels ) * sizeof( u8 ); i++ ) {
+        if ( BIT( i ) & channels ) {
+            level[ j ] = 0;
+            for(
+                now = current_kernel_time(),
+                    then = now,
+                    ns = then.tv_nsec + duration_ns,
+                    then.tv_nsec = ns % nsec_per_sec,
+                    then.tv_nsec += ns / nsec_per_sec;
+                now.tv_nsec + now.tv_sec * nsec_per_sec
+                    < then.tv_nsec + then.tv_sec * nsec_per_sec;
+                now = current_kernel_time()
+            ) {
+                ret = local->ops->ed( &local->hw, &tmp_level );
+                if ( 0 != ret ) {
+                    goto out;
+                }
+                level[ j ] = tmp_level >= level[ j ] ? tmp_level : level[ j ];
+            }
+            j++;
+        }
+    }
+
+out:
+    return ret;
 }
 
 #endif /* __MAC802154_DRIVER_OPS */

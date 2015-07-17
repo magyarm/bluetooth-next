@@ -378,9 +378,30 @@ static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
-	BUG_ON(!level);
-	*level = 0xbe;
-	return 0;
+    int r;
+
+    struct atusb *atusb = hw->priv;
+    struct device *dev = &atusb->usb_dev->dev;
+
+    BUG_ON(!level);
+    r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
+    if (0xff == r) {
+        r = atusb_write_reg(atusb, RG_PHY_ED_LEVEL, 0x00);
+        if (r < 0) {
+            goto out;
+        }
+        r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
+    }
+    if (r < 0 || r > 0x54) {
+        r = r < 0 ? r : -EINVAL;
+        goto out;
+    }
+    // valid values are [0x00,0x54]
+    // we need to scale to [0x00,0xff]
+    *level = r * 3;
+    r = 0;
+out:
+	return r;
 }
 
 static int atusb_set_hw_addr_filt(struct ieee802154_hw *hw,
