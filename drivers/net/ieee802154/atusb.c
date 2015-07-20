@@ -384,7 +384,6 @@ static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
     struct device *dev = &atusb->usb_dev->dev;
 
     BUG_ON(!level);
-/*
     r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
     if (0xff == r) {
         r = atusb_write_reg(atusb, RG_PHY_ED_LEVEL, 0x00);
@@ -400,14 +399,6 @@ static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
     // valid values are [0x00,0x54]
     // we need to scale to [0x00,0xff]
     *level = r * 3;
-*/
-    int rssi = atusb_read_reg( atusb, RG_PHY_RSSI ) & 0x1f;
-    if ( rssi < 0 ) {
-        r = rssi;
-        goto out;
-    }
-    printk(  );
-    *level = -91 + 3 * ( rssi - 1 );
     r = 0;
 out:
 	return r;
@@ -691,8 +682,6 @@ static int atusb_probe(struct usb_interface *interface,
 	 * making the command below redundant.
 	 */
 	atusb_write_reg(atusb, RG_TRX_STATE, STATE_FORCE_TRX_OFF);
-    atusb_write_reg(atusb, RG_TRX_STATE, STATE_RX_ON);
-    atusb_write_reg(atusb, RG_IRQ_MASK, IRQ_PLL_LOCK);
 	msleep(1);	/* reset => TRX_OFF, tTR13 = 37 us */
 
 #if 0
