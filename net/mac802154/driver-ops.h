@@ -350,6 +350,11 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
                     < then.tv_nsec + then.tv_sec * nsec_per_sec;
                 now = current_kernel_time()
             ) {
+                ret = local->ops->set_channel( &local->hw, page, i );
+                if ( 0 != ret ) {
+                    printk( KERN_INFO "failed to set channel %d\n", i );
+                    goto out;
+                }
                 ret = local->ops->ed( &local->hw, &tmp_level );
                 if ( 0 != ret ) {
                     printk( KERN_INFO "failed to read channel %d\n", i );
