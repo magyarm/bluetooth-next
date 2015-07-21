@@ -1087,60 +1087,36 @@ out:
     return r;
 }
 
-static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
-{
+static void nl802154_ed_scan_cnf( struct work_struct *work ) {
+
     int r;
+    const u8 scan_type = 0;
+
+    u8 ed[ IEEE802154_MAX_CHANNEL + 1 ];
+
+    struct work802154 *wrk;
+    struct sk_buff *skb;
+    struct genl_info *info;
+    struct cfg802154_registered_device *rdev;
+    struct wpan_dev *wpan_dev;
 
     int i;
-    u8 ed[ IEEE802154_MAX_CHANNEL + 1 ];
-    u8 scan_type;
-    __le32 scan_channels;
-    u8 scan_duration;
-    u8 channel_page;
 
     u8 status;
+    u8 channel_page;
+    u32 scan_channels;
+    u8 scan_duration;
     __le32 unscanned_channels;
     u8 result_list_size;
     u8 detected_category;
-
-	struct cfg802154_registered_device *rdev;
     struct sk_buff *reply;
     void *hdr;
 
+    wrk = container_of( work, struct work802154, work );
+    skb = wrk->skb;
+    info = wrk->info;
     rdev = info->user_ptr[0];
-
-    if ( ! (
-        info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
-        info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] &&
-        info->attrs[ NL802154_ATTR_SCAN_DURATION ] &&
-        info->attrs[ NL802154_ATTR_PAGE ]
-    ) ) {
-        r = -EINVAL;
-        goto out;
-    }
-
-    scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
-    scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] );
-    scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
-    channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
-
-    printk( KERN_INFO "channel_page is %u\n", channel_page );
-
-    if ( channel_page > IEEE802154_MAX_PAGE ) {
-        printk( KERN_INFO "invalid channel_page %u\n", channel_page );
-        r = -EINVAL;
-        goto out;
-    }
-
-    printk( KERN_INFO "scan_channels is %08x\n", scan_channels );
-
-    if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-        printk( KERN_INFO "invalid scan_channels %u\n", scan_channels );
-        r = -EINVAL;
-        goto out;
-    }
-
-    printk( KERN_INFO "scan_channels is %08x\n", scan_channels );
+    wpan_dev = info->user_ptr[1];
 
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
@@ -1154,10 +1130,13 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
         goto free_reply;
     }
 
-    // XXX: 802154 "SUCCESS". Must also report SCAN_IN_PROGRESS, INVALID_PARAMETER, etc...
-    status = 0;
+    status = IEEE802154_SUCCESS;
     unscanned_channels = 0;
     detected_category = 2; // ed_scan
+
+    channel_page = wrk->cmd_stuff.ed_scan.channel_page;
+    scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
+    scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
 
     r = rdev_get_ed_scan(rdev, NULL, ed, channel_page, scan_duration );
     if ( r < 0 ) {
@@ -1167,8 +1146,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
         result_list_size += !!( scan_channels & (1 << i) );
     }
-
-    printk( KERN_INFO "result_list_size is %u\n", result_list_size );
 
     r =
         nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, status ) ||
@@ -1188,10 +1165,81 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     goto out;
 
 nla_put_failure:
-    r = -ENOBUFS;
-
 free_reply:
     nlmsg_free( reply );
+out:
+    kfree( wrk );
+    return;
+}
+
+static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
+{
+    int r;
+
+    u8 scan_type;
+    __le32 scan_channels;
+    u8 scan_duration;
+    u8 channel_page;
+
+	struct cfg802154_registered_device *rdev;
+
+	struct work802154 *wrk;
+
+    rdev = info->user_ptr[0];
+
+    if ( ! (
+        info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
+        info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] &&
+        info->attrs[ NL802154_ATTR_SCAN_DURATION ] &&
+        info->attrs[ NL802154_ATTR_PAGE ]
+    ) ) {
+        r = -EINVAL;
+        goto out;
+    }
+
+    scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
+    scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] );
+    scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
+    channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
+
+    if ( channel_page > IEEE802154_MAX_PAGE ) {
+        // XXX: printk's need to be changed to dev_err - which dev??
+        printk( KERN_INFO "invalid channel_page %u\n", channel_page );
+        r = -EINVAL;
+        goto out;
+    }
+
+    if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
+        // XXX: printk's need to be changed to dev_err - which dev??
+        printk( KERN_INFO "invalid scan_channels %u\n", scan_channels );
+        r = -EINVAL;
+        goto out;
+    }
+
+    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+    if ( NULL == wrk ) {
+        r = -ENOMEM;
+        goto out;
+    }
+    wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+    wrk->skb = skb;
+    wrk->info = info;
+    wrk->cmd_stuff.ed_scan.channel_page = channel_page;
+    wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
+    wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
+    INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+
+    r = ieee802154_add_work( wrk );
+    if ( 0 != r ) {
+        goto free_wrk;
+    }
+
+    r = 0;
+    goto out;
+
+free_wrk:
+    kfree( wrk );
+
 out:
     return r;
 }
