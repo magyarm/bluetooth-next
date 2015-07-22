@@ -276,26 +276,30 @@ static int
 ieee802154_ed_scan_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 			u8 *level, u8 page, u8 duration)
 {
+	printk( KERN_INFO "In ieee802154_get_ed_scan \n" );
+
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	int ret = 0;
 
-	struct scan_work *local_scan_work = kmalloc( sizeof( struct scan_work ), GFP_KERNEL );
-
-	local_scan_work->local = local;
-	local_scan_work->channel_page = page;
-	local_scan_work->scan_duration = duration;
-
 	ASSERT_RTNL();
 
-	printk( KERN_INFO "In ieee802154_get_ed_scan \n" );
+	drv_ed_scan( local, level, page, duration );
 
-	//Should schedule the work here.
-	//drv_ed_scan should be the struct work's function to execute
+	return ret;
+}
 
-	INIT_WORK( &(local_scan_work->scanwork), drv_ed_scan );
+int
+ieee802154_add_work( struct work802154 *wrk ) {
 
-	//drv_ed_scan( local, level, page, duration );
-	queue_work( local->workqueue, &(local_scan_work->scanwork) );
+	int ret = 0;
+	struct wpan_phy *phy;
+	struct ieee802154_local *local;
+
+	phy = wrk->phy;
+	local = wpan_phy_priv( phy );
+
+	printk( KERN_INFO "In ieee802154_add_work \n" );
+	ret = queue_work( local->workqueue, &(wrk->work) );
 
 	return ret;
 }

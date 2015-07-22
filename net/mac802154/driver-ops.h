@@ -313,6 +313,8 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
 	u8 nchannels;
 	struct timespec now, then;
 
+	printk( KERN_INFO "In drv_ed_scan \n" );
+
 	if (!local->ops->ed) {
 		WARN_ON(1);
 		return -EOPNOTSUPP;

@@ -1138,7 +1138,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
     scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
 
-    r = rdev_get_ed_scan(rdev, NULL, ed, channel_page, scan_duration );
+    r = rdev_get_ed_scan(rdev, wpan_dev, ed, channel_page, scan_duration );
     if ( r < 0 ) {
         goto free_reply;
     }
@@ -1182,6 +1182,8 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     u8 channel_page;
 
 	struct cfg802154_registered_device *rdev;
+	struct net_device *dev = info->user_ptr[1];
+		struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	struct work802154 *wrk;
 
@@ -1224,6 +1226,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
     wrk->skb = skb;
     wrk->info = info;
+    wrk->phy = &(rdev->wpan_phy);
     wrk->cmd_stuff.ed_scan.channel_page = channel_page;
     wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;

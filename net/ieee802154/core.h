@@ -17,8 +17,6 @@ struct cfg802154_registered_device {
 	/* protected by RTNL only */
 	int num_running_ifaces;
 
-	struct genl_info *cur_cmd_info;
-
 	/* associated wpan interfaces, protected by rtnl or RCU */
 	struct list_head wpan_dev_list;
 	int devlist_generation, wpan_dev_id;

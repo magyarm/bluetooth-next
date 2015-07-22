@@ -200,8 +200,8 @@ rdev_get_ed_scan(struct cfg802154_registered_device *rdev,
 		  struct wpan_dev *wpan_dev, u8 *level, u8 duration, u8 page )
 {
 	int ret = 0;
-
-	ret = rdev->ops->ed_scan_req(&rdev->wpan_phy, wpan_dev, level, duration, page );
+	printk( KERN_INFO "In rdev_get_ed_scan function \n" );
+	ret = rdev->ops->ed_scan_req(&rdev->wpan_phy, wpan_dev, level, page, duration );
 
 	return ret;
 }

@@ -362,6 +362,7 @@ void ieee802154_xmit_complete(struct ieee802154_hw *hw, struct sk_buff *skb,
 struct work802154 {
     struct sk_buff *skb;
     struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
+    struct wpan_phy *phy;
     int cmd; // selects which item in the union below to use
     union {
         // put any additional command-specific structs in here
@@ -377,9 +378,7 @@ struct work802154 {
     } cmd_stuff;
     struct work_struct work;
 };
-static inline int ieee802154_add_work( struct work802154 *wrk ) {
-    return 0;
-}
+int ieee802154_add_work( struct work802154 *work );
 // </dummy>
 
 #endif /* NET_MAC802154_H */
