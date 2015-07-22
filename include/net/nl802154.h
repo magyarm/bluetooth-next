@@ -24,7 +24,7 @@
 enum nl802154_commands {
 /* don't change the order or add anything between, this is ABI! */
 /* currently we don't shipping this file via uapi, ignore the above one */
-	NL802154_CMD_UNSPEC,
+	NL802154_CMD_UNSPEC,                   /* 0 */
 
 	NL802154_CMD_GET_WPAN_PHY,		/* can dump */
 	NL802154_CMD_SET_WPAN_PHY,
@@ -38,14 +38,14 @@ enum nl802154_commands {
 
 	NL802154_CMD_SET_CHANNEL,
 
-	NL802154_CMD_SET_PAN_ID,
+	NL802154_CMD_SET_PAN_ID,               /* 10 */
 	NL802154_CMD_SET_SHORT_ADDR,
 
 	NL802154_CMD_SET_TX_POWER,
 	NL802154_CMD_SET_CCA_MODE,
 	NL802154_CMD_SET_CCA_ED_LEVEL,
 
-	NL802154_CMD_SET_MAX_FRAME_RETRIES,
+	NL802154_CMD_SET_MAX_FRAME_RETRIES,    /* 15 */
 
 	NL802154_CMD_SET_BACKOFF_EXPONENT,
 	NL802154_CMD_SET_MAX_CSMA_BACKOFFS,
@@ -54,6 +54,8 @@ enum nl802154_commands {
 
     NL802154_CMD_ED_SCAN_REQ,
     NL802154_CMD_ED_SCAN_CNF,
+
+    NL802154_CMD_SET_BEACON_INDICATION_ON, /* 21 */
 
 	/* add new commands above here */
 
@@ -122,6 +124,8 @@ enum nl802154_attrs {
     NL802154_ATTR_SEC_KEY_SOURCE,
     NL802154_ATTR_SEC_KEY_SOURCE_ENTRY,
     NL802154_ATTR_SEC_KEY_INDEX,
+
+	NL802154_ATTR_BEACON_SEQUENCE_NUMBER,
 
 	/* add attributes here, update the policy in nl802154.c */
 

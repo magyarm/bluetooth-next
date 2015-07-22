@@ -1244,6 +1244,99 @@ out:
     return r;
 }
 
+static void nl802154_beacon_indication( struct work_struct *work )
+{
+
+#if 0
+    int r;
+
+    u8 bsn;
+
+    struct work802154 *wrk;
+    struct sk_buff *skb;
+    struct genl_info *info;
+    struct sk_buff *reply;
+    void *hdr;
+#endif
+
+    printk(KERN_INFO "Inside %s", __FUNCTION__);
+
+#if 0
+    wrk  = container_of( work, struct work802154, work );
+    skb  = wrk->skb;
+    info = wrk->info;
+
+    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+    if ( NULL == reply ) {
+        r = -ENOMEM;
+        goto out;
+    }
+
+    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_SET_BEACON_INDICATION_ON );
+    if ( NULL == hdr ) {
+        r = -ENOBUFS;
+        goto free_reply;
+    }
+
+    // dummy bsn value for now
+    bsn = 5;
+    r = nla_put_u8( reply, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, bsn );
+    if ( 0 != r ) {
+        goto nla_put_failure;
+    }
+
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );
+    goto out;
+
+nla_put_failure:
+free_reply:
+    nlmsg_free( reply );
+out:
+    kfree( wrk );
+#endif
+    return;
+}
+
+static int nl802154_set_beacon_indication_on( struct sk_buff *skb, struct genl_info *info )
+{
+    int r;
+
+	struct cfg802154_registered_device *rdev;
+	struct work802154 *wrk;
+
+    rdev = info->user_ptr[0];
+
+    printk(KERN_INFO "Inside %s", __FUNCTION__);
+
+    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+    if ( NULL == wrk ) {
+        r = -ENOMEM;
+        goto out;
+    }
+    wrk->cmd  = NL802154_CMD_SET_BEACON_INDICATION_ON;
+    wrk->skb  = skb;
+    wrk->info = info;
+    INIT_WORK( &wrk->work, nl802154_beacon_indication );
+
+    schedule_work( &wrk->work );
+
+    r = ieee802154_add_work( wrk );
+    if ( 0 != r ) {
+        goto free_wrk;
+    }
+
+    r = 0;
+    goto out;
+
+free_wrk:
+    kfree( wrk );
+
+out:
+    return r;
+}
+
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
 #define NL802154_FLAG_NEED_RTNL		0x04
@@ -1453,6 +1546,14 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_ED_SCAN_REQ,
 		.doit = nl802154_ed_scan_req,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_SET_BEACON_INDICATION_ON,
+		.doit = nl802154_set_beacon_indication_on,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
