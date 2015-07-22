@@ -231,20 +231,19 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 
 	[NL802154_ATTR_SUPPORTED_COMMANDS] = { .type = NLA_NESTED },
 
+    [NL802154_ATTR_SCAN_STATUS] = { .type = NLA_U8, },
     [NL802154_ATTR_SCAN_TYPE] = { .type = NLA_U8, },
-    [NL802154_ATTR_CHANNEL_MASK] = { .type = NLA_U32, },
-    [NL802154_ATTR_DURATION] = { .type = NLA_U8, },
-
-    [NL802154_ATTR_SECURITY_LEVEL] = { .type = NLA_U8, },
-    [NL802154_ATTR_KEY_ID_MODE] = { .type = NLA_U8, },
-    [NL802154_ATTR_KEY_SOURCE] = { .type = NLA_NUL_STRING, .len = 8+1, },
-    [NL802154_ATTR_KEY_INDEX] = { .type = NLA_U8, },
-
-    [NL802154_ATTR_STATUS] = { .type = NLA_U8, },
-
+    [NL802154_ATTR_SCAN_DURATION] = { .type = NLA_U8, },
     [NL802154_ATTR_SCAN_RESULT_LIST_SIZE] = { .type = NLA_U8, },
-    [NL802154_ATTR_ENERGY_DETECT_LIST] =  { .type = NLA_NUL_STRING, .len = 32+1, },
-    [NL802154_ATTR_DETECTED_CATEGORY] = { .type = NLA_U8, },
+    [NL802154_ATTR_SCAN_ENERGY_DETECT_LIST] = { .type = NLA_NESTED, },
+    [NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY] = { .type = NLA_U8, },
+    [NL802154_ATTR_SCAN_DETECTED_CATEGORY] = { .type = NLA_U8, },
+
+    [NL802154_ATTR_SEC_LEVEL] = { .type = NLA_U8, },
+    [NL802154_ATTR_SEC_KEY_ID_MODE] = { .type = NLA_U8, },
+    [NL802154_ATTR_SEC_KEY_SOURCE] = { .type = NLA_NESTED, },
+    [NL802154_ATTR_SEC_KEY_SOURCE_ENTRY] = { .type = NLA_U8, },
+    [NL802154_ATTR_SEC_KEY_INDEX] = { .type = NLA_U8, },
 };
 
 /* message building helper */
@@ -473,7 +472,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
-	CMD(get_ed_scan, GET_ED_SCAN);
+	CMD(get_ed_scan, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1058,137 +1057,191 @@ static int nl802154_set_lbt_mode(struct sk_buff *skb, struct genl_info *info)
 	return rdev_set_lbt_mode(rdev, wpan_dev, mode);
 }
 
-static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
+static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, u32 scan_channels, u8 *ed ) {
+    int r;
+
+    int i, j;
+    struct nlattr *ed_list;
+    ed_list = nla_nest_start( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST );
+    if ( NULL == ed_list ) {
+        r = -ENOBUFS;
+        goto out;
+    }
+    for( i = 0, j = 0; i <= IEEE802154_MAX_CHANNEL && j <= result_list_size; i++ ) {
+        if ( scan_channels & (1 << i) ) {
+            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ i ] );
+            if ( 0 != r ) {
+                goto nla_put_failure;
+            }
+            printk( KERN_INFO "channel %u has value %u\n", i, ed[ i ] );
+            j++;
+        }
+    }
+    nla_nest_end( reply, ed_list );
+    r = 0;
+    goto out;
+
+nla_put_failure:
+    r = -ENOBUFS;
+out:
+    return r;
+}
+
+static void nl802154_ed_scan_cnf( struct work_struct *work ) {
+
+    int r;
+    const u8 scan_type = 0;
+
+    u8 ed[ IEEE802154_MAX_CHANNEL + 1 ];
+
+    struct work802154 *wrk;
+    struct sk_buff *skb;
+    struct genl_info *info;
+    struct cfg802154_registered_device *rdev;
+    struct wpan_dev *wpan_dev;
+
+    int i;
+
+    u8 status;
+    u8 channel_page;
+    u32 scan_channels;
+    u8 scan_duration;
+    __le32 unscanned_channels;
+    u8 result_list_size;
+    u8 detected_category;
+    struct sk_buff *reply;
+    void *hdr;
+
+    wrk = container_of( work, struct work802154, work );
+    skb = wrk->skb;
+    info = wrk->info;
+    rdev = info->user_ptr[0];
+    wpan_dev = info->user_ptr[1];
+
+    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+    if ( NULL == reply ) {
+        r = -ENOMEM;
+        goto out;
+    }
+
+    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ED_SCAN_CNF );
+    if ( NULL == hdr ) {
+        r = -ENOBUFS;
+        goto free_reply;
+    }
+
+    status = IEEE802154_SUCCESS;
+    unscanned_channels = 0;
+    detected_category = 2; // ed_scan
+
+    channel_page = wrk->cmd_stuff.ed_scan.channel_page;
+    scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
+    scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
+
+    r = rdev_get_ed_scan(rdev, NULL, ed, channel_page, scan_duration );
+    if ( r < 0 ) {
+        goto free_reply;
+    }
+
+    for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
+        result_list_size += !!( scan_channels & (1 << i) );
+    }
+
+    r =
+        nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, status ) ||
+        nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type ) ||
+        nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page ) ||
+        nla_put_u32( reply, NL802154_ATTR_SUPPORTED_CHANNEL, unscanned_channels ) ||
+        nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size ) ||
+        nl802154_ed_scan_put_ed( reply, result_list_size, scan_channels, ed ) ||
+        nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, detected_category );
+    if ( 0 != r ) {
+        goto nla_put_failure;
+    }
+
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );
+    goto out;
+
+nla_put_failure:
+free_reply:
+    nlmsg_free( reply );
+out:
+    kfree( wrk );
+    return;
+}
+
+static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
     int r;
 
-    int i;
-    unsigned char ed_list[32];
     u8 scan_type;
     __le32 scan_channels;
     u8 scan_duration;
     u8 channel_page;
-    u8 security_level;
-    u8 key_id_mode;
-    // uint8_t key_source[4 + 1] = {};
-    char *key_source;
-    u8 key_index;
-
-    u8 status;
-    __le32 unscanned_channels;
-    u8 result_list_size;
-    //uint8_t energy_detect_list[ 32 ];
-    char *energy_detect_list;
-    u8 detected_category;
 
 	struct cfg802154_registered_device *rdev;
 
+	struct work802154 *wrk;
 
     rdev = info->user_ptr[0];
-    memset( ed_list, 0xff, sizeof( ed_list ) );
 
     if ( ! (
-            info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
-            info->attrs[ NL802154_ATTR_CHANNEL_MASK ] &&
-            info->attrs[ NL802154_ATTR_DURATION ] &&
-            info->attrs[ NL802154_ATTR_PAGE ] &&
-            info->attrs[ NL802154_ATTR_SECURITY_LEVEL ] &&
-            info->attrs[ NL802154_ATTR_KEY_ID_MODE ] &&
-            info->attrs[ NL802154_ATTR_KEY_INDEX ]
+        info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
+        info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] &&
+        info->attrs[ NL802154_ATTR_SCAN_DURATION ] &&
+        info->attrs[ NL802154_ATTR_PAGE ]
     ) ) {
         r = -EINVAL;
         goto out;
     }
 
     scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
-    scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_CHANNEL_MASK ] );
-    scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_DURATION ] );
+    scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] );
+    scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
     channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
-    security_level = nla_get_u8( info->attrs[ NL802154_ATTR_SECURITY_LEVEL ] );
-    key_id_mode = nla_get_u8( info->attrs[ NL802154_ATTR_KEY_ID_MODE ] );
-    key_source = (char *)nla_data( info->attrs[ NL802154_ATTR_KEY_SOURCE ] );
-    key_index = nla_get_u8( info->attrs[ NL802154_ATTR_KEY_INDEX ] );
 
-    rdev->cur_cmd_info = info;
+    if ( channel_page > IEEE802154_MAX_PAGE ) {
+        // XXX: printk's need to be changed to dev_err - which dev??
+        printk( KERN_INFO "invalid channel_page %u\n", channel_page );
+        r = -EINVAL;
+        goto out;
+    }
 
-    r = rdev_get_ed_scan(rdev, NULL, ed_list, channel_page, scan_duration );
+    if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
+        // XXX: printk's need to be changed to dev_err - which dev??
+        printk( KERN_INFO "invalid scan_channels %u\n", scan_channels );
+        r = -EINVAL;
+        goto out;
+    }
+
+    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+    if ( NULL == wrk ) {
+        r = -ENOMEM;
+        goto out;
+    }
+    wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+    wrk->skb = skb;
+    wrk->info = info;
+    wrk->cmd_stuff.ed_scan.channel_page = channel_page;
+    wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
+    wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
+    INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+
+    r = ieee802154_add_work( wrk );
+    if ( 0 != r ) {
+        goto free_wrk;
+    }
+
+    r = 0;
+    goto out;
+
+free_wrk:
+    kfree( wrk );
 
 out:
     return r;
-}
-
-//Call this from the work queue when done to pass scan results back to user space
-static int nl802154_send_ed_scan_results( struct sk_buff *skb, struct genl_info *info )
-{
-	int r;
-	int i;
-	unsigned char ed_list[32];
-	u8 scan_type;
-	__le32 scan_channels;
-	u8 scan_duration;
-	u8 channel_page;
-	u8 security_level;
-	u8 key_id_mode;
-	// uint8_t key_source[4 + 1] = {};
-	char *key_source;
-	u8 key_index;
-
-	u8 status;
-	__le32 unscanned_channels;
-	u8 result_list_size;
-	//uint8_t energy_detect_list[ 32 ];
-	char *energy_detect_list;
-	u8 detected_category;
-
-	struct sk_buff *reply;
-	void *hdr;
-
-	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-	if ( NULL == reply ) {
-		r = -ENOMEM;
-		goto out;
-	}
-
-	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_GET_ED_SCAN );
-	if ( NULL == hdr ) {
-		r = -ENOBUFS;
-		goto free_reply;
-	}
-
-	status = 0; // XXX: 802154 "SUCCESS"
-	unscanned_channels = 0;
-	result_list_size = 32;
-	energy_detect_list = (char *) ed_list;
-	detected_category = 2;
-
-	if ( r < 0 ) {
-		goto free_reply;
-	}
-
-	for( i = 0; i < ARRAY_SIZE( ed_list ); i++ ) {
-		if ( 0xff != ed_list[i] ) {
-			break;
-		}
-	}
-	result_list_size = i;
-
-	nla_put_u8( reply, NL802154_ATTR_STATUS, status );
-	nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type );
-	nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page );
-	nla_put_u32( reply, NL802154_ATTR_CHANNEL_MASK, unscanned_channels );
-	nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size );
-	nla_put_string( reply, NL802154_ATTR_ENERGY_DETECT_LIST, energy_detect_list );
-	nla_put_u8( reply, NL802154_ATTR_DETECTED_CATEGORY, detected_category );
-
-	genlmsg_end( reply, hdr );
-
-	r = genlmsg_reply( reply, info );
-	goto out;
-
-	free_reply:
-	    nlmsg_free( reply );
-	out:
-	    return r;
 }
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
@@ -1398,21 +1451,13 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_GET_ED_SCAN,
-		.doit = nl802154_get_ed_scan,
+		.cmd = NL802154_CMD_ED_SCAN_REQ,
+		.doit = nl802154_ed_scan_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
-	{
-		.cmd = NL802154_SEND_ED_SCAN_RESULTS,
-		.doit = nl802154_send_ed_scan_results,
-		.policy = nl802154_policy,
-		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
-					NL802154_FLAG_NEED_RTNL,
-		},
 };
 
 /* initialisation/exit functions */
