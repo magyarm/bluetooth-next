@@ -201,7 +201,7 @@ rdev_get_ed_scan(struct cfg802154_registered_device *rdev,
 {
 	int ret = 0;
 
-	ret = rdev->ops->get_ed_scan(&rdev->wpan_phy, wpan_dev, level, duration, page );
+	ret = rdev->ops->ed_scan_req(&rdev->wpan_phy, wpan_dev, level, duration, page );
 
 	return ret;
 }

@@ -472,7 +472,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
-	CMD(get_ed_scan, ED_SCAN_REQ);
+	CMD(ed_scan_req, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
