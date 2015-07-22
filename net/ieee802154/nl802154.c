@@ -1256,18 +1256,18 @@ static void nl802154_beacon_indication( struct work_struct *work )
     //struct sk_buff *reply;
     //void *hdr;
     //struct sk_buff *skb;
-    //struct work802154 *wrk;
+    struct work802154 *wrk;
     //struct genl_info *info;
 
     //printk(KERN_INFO "Inside %s %d", __FUNCTION__, bsn );
 
-    //wrk  = container_of( work, struct work802154, d_work );
+    wrk  = container_of( work, struct work802154, work );
     //skb  = wrk->skb;
     //info = wrk->info;
 
     printk( KERN_INFO "Inside scheduled word fn %s %d\n", __FUNCTION__, bsn );
 
-    //schedule_delayed_work( &wrk->d_work, msecs_to_jiffies( 10 ) );
+    schedule_work( &wrk->work );
 
 #if 0
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
@@ -1323,9 +1323,9 @@ static int nl802154_set_beacon_indication_on( struct sk_buff *skb, struct genl_i
     wrk->cmd  = NL802154_CMD_SET_BEACON_INDICATION_ON;
     wrk->skb  = skb;
     wrk->info = info;
-    INIT_DELAYED_WORK( &wrk->d_work, nl802154_beacon_indication );
+    INIT_WORK( &wrk->work, nl802154_beacon_indication );
 
-    schedule_delayed_work( &wrk->d_work, 0 );
+    schedule_work( &wrk->work );
 
     //r = ieee802154_add_work( wrk );
     //if ( 0 != r ) {
