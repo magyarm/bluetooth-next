@@ -53,6 +53,7 @@ enum nl802154_commands {
 	NL802154_CMD_SET_LBT_MODE,
 
 	NL802154_CMD_GET_ED_SCAN,
+	NL802154_SEND_ED_SCAN_RESULTS,
 
 	/* add new commands above here */
 

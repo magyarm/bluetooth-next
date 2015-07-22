@@ -1082,8 +1082,7 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     u8 detected_category;
 
 	struct cfg802154_registered_device *rdev;
-    struct sk_buff *reply;
-    void *hdr;
+
 
     rdev = info->user_ptr[0];
     memset( ed_list, 0xff, sizeof( ed_list ) );
@@ -1110,53 +1109,86 @@ static int nl802154_get_ed_scan( struct sk_buff *skb, struct genl_info *info )
     key_source = (char *)nla_data( info->attrs[ NL802154_ATTR_KEY_SOURCE ] );
     key_index = nla_get_u8( info->attrs[ NL802154_ATTR_KEY_INDEX ] );
 
-    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-    if ( NULL == reply ) {
-        r = -ENOMEM;
-        goto out;
-    }
-
-    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_GET_ED_SCAN );
-    if ( NULL == hdr ) {
-        r = -ENOBUFS;
-        goto free_reply;
-    }
-
-    status = 0; // XXX: 802154 "SUCCESS"
-    unscanned_channels = 0;
-    result_list_size = 32;
-    energy_detect_list = (char *) ed_list;
-    detected_category = 2;
+    rdev->cur_cmd_info = info;
 
     r = rdev_get_ed_scan(rdev, NULL, ed_list, channel_page, scan_duration );
-    if ( r < 0 ) {
-        goto free_reply;
-    }
 
-    for( i = 0; i < ARRAY_SIZE( ed_list ); i++ ) {
-        if ( 0xff != ed_list[i] ) {
-            break;
-        }
-    }
-    result_list_size = i;
-
-    nla_put_u8( reply, NL802154_ATTR_STATUS, status );
-    nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type );
-    nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page );
-    nla_put_u32( reply, NL802154_ATTR_CHANNEL_MASK, unscanned_channels );
-    nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size );
-    nla_put_string( reply, NL802154_ATTR_ENERGY_DETECT_LIST, energy_detect_list );
-    nla_put_u8( reply, NL802154_ATTR_DETECTED_CATEGORY, detected_category );
-
-    genlmsg_end( reply, hdr );
-
-    r = genlmsg_reply( reply, info );
-    goto out;
-
-free_reply:
-    nlmsg_free( reply );
 out:
     return r;
+}
+
+//Call this from the work queue when done to pass scan results back to user space
+static int nl802154_send_ed_scan_results( struct sk_buff *skb, struct genl_info *info )
+{
+	int r;
+	int i;
+	unsigned char ed_list[32];
+	u8 scan_type;
+	__le32 scan_channels;
+	u8 scan_duration;
+	u8 channel_page;
+	u8 security_level;
+	u8 key_id_mode;
+	// uint8_t key_source[4 + 1] = {};
+	char *key_source;
+	u8 key_index;
+
+	u8 status;
+	__le32 unscanned_channels;
+	u8 result_list_size;
+	//uint8_t energy_detect_list[ 32 ];
+	char *energy_detect_list;
+	u8 detected_category;
+
+	struct sk_buff *reply;
+	void *hdr;
+
+	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == reply ) {
+		r = -ENOMEM;
+		goto out;
+	}
+
+	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_GET_ED_SCAN );
+	if ( NULL == hdr ) {
+		r = -ENOBUFS;
+		goto free_reply;
+	}
+
+	status = 0; // XXX: 802154 "SUCCESS"
+	unscanned_channels = 0;
+	result_list_size = 32;
+	energy_detect_list = (char *) ed_list;
+	detected_category = 2;
+
+	if ( r < 0 ) {
+		goto free_reply;
+	}
+
+	for( i = 0; i < ARRAY_SIZE( ed_list ); i++ ) {
+		if ( 0xff != ed_list[i] ) {
+			break;
+		}
+	}
+	result_list_size = i;
+
+	nla_put_u8( reply, NL802154_ATTR_STATUS, status );
+	nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type );
+	nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page );
+	nla_put_u32( reply, NL802154_ATTR_CHANNEL_MASK, unscanned_channels );
+	nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size );
+	nla_put_string( reply, NL802154_ATTR_ENERGY_DETECT_LIST, energy_detect_list );
+	nla_put_u8( reply, NL802154_ATTR_DETECTED_CATEGORY, detected_category );
+
+	genlmsg_end( reply, hdr );
+
+	r = genlmsg_reply( reply, info );
+	goto out;
+
+	free_reply:
+	    nlmsg_free( reply );
+	out:
+	    return r;
 }
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
@@ -1373,6 +1405,14 @@ static const struct genl_ops nl802154_ops[] = {
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
+	{
+		.cmd = NL802154_SEND_ED_SCAN_RESULTS,
+		.doit = nl802154_send_ed_scan_results,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+					NL802154_FLAG_NEED_RTNL,
+		},
 };
 
 /* initialisation/exit functions */

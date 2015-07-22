@@ -9,6 +9,15 @@
 #include "ieee802154_i.h"
 #include "trace.h"
 
+typedef struct scan_work{
+  struct work_struct scanwork;
+  struct ieee802154_local *local;
+  u8 scan_type;
+  u8 channel_page;
+  u8 scan_duration;
+  unsigned char channel_list[32];
+};
+
 static inline int
 drv_xmit_async(struct ieee802154_local *local, struct sk_buff *skb)
 {
@@ -339,7 +348,7 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
     for( i = 0; i < sizeof( channels ) * 8; i++ ) {
         level[ i ] = 0;
         if ( BIT( i ) & channels ) {
-            //printk( KERN_INFO "reading channel %u\n", i );
+            printk( KERN_INFO "reading channel %u\n", i );
             for(
                 now = current_kernel_time(),
                     then = now,
@@ -350,6 +359,7 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
                     < then.tv_nsec + then.tv_sec * nsec_per_sec;
                 now = current_kernel_time()
             ) {
+            	local->ops->set_channel( &local->hw, page, i );
                 ret = local->ops->ed( &local->hw, &tmp_level );
                 if ( 0 != ret ) {
                     printk( KERN_INFO "failed to read channel %d\n", i );
