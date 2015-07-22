@@ -376,6 +376,7 @@ struct work802154 {
         } ed_scan;
     } cmd_stuff;
     struct work_struct work;
+    struct delayed_work d_work;
 };
 static inline int ieee802154_add_work( struct work802154 *wrk ) {
     return 0;

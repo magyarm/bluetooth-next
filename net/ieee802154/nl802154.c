@@ -14,6 +14,7 @@
  */
 
 #include <linux/rtnetlink.h>
+#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
@@ -1247,25 +1248,28 @@ out:
 static void nl802154_beacon_indication( struct work_struct *work )
 {
 
+    //int r;
+
+    u8 bsn = 5;
+
+    //struct genl_info *info;
+    //struct sk_buff *reply;
+    //void *hdr;
+    //struct sk_buff *skb;
+    //struct work802154 *wrk;
+    //struct genl_info *info;
+
+    //printk(KERN_INFO "Inside %s %d", __FUNCTION__, bsn );
+
+    //wrk  = container_of( work, struct work802154, d_work );
+    //skb  = wrk->skb;
+    //info = wrk->info;
+
+    printk( KERN_INFO "Inside scheduled word fn %s %d\n", __FUNCTION__, bsn );
+
+    //schedule_delayed_work( &wrk->d_work, msecs_to_jiffies( 10 ) );
+
 #if 0
-    int r;
-
-    u8 bsn;
-
-    struct work802154 *wrk;
-    struct sk_buff *skb;
-    struct genl_info *info;
-    struct sk_buff *reply;
-    void *hdr;
-#endif
-
-    printk(KERN_INFO "Inside %s", __FUNCTION__);
-
-#if 0
-    wrk  = container_of( work, struct work802154, work );
-    skb  = wrk->skb;
-    info = wrk->info;
-
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
@@ -1308,6 +1312,46 @@ static int nl802154_set_beacon_indication_on( struct sk_buff *skb, struct genl_i
 
     rdev = info->user_ptr[0];
 
+    printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+    if ( NULL == wrk ) {
+        r = -ENOMEM;
+        goto out;
+    }
+
+    wrk->cmd  = NL802154_CMD_SET_BEACON_INDICATION_ON;
+    wrk->skb  = skb;
+    wrk->info = info;
+    INIT_DELAYED_WORK( &wrk->d_work, nl802154_beacon_indication );
+
+    schedule_delayed_work( &wrk->d_work, 0 );
+
+    //r = ieee802154_add_work( wrk );
+    //if ( 0 != r ) {
+    //    goto free_wrk;
+    //}
+
+    r = 0;
+    goto out;
+
+//free_wrk:
+//    kfree( wrk );
+
+out:
+    return r;
+}
+
+#if 0
+static int nl802154_set_beacon_indication_off( struct sk_buff *skb, struct genl_info *info )
+{
+    int r;
+
+	struct cfg802154_registered_device *rdev;
+	struct work802154 *wrk;
+
+    rdev = info->user_ptr[0];
+
     printk(KERN_INFO "Inside %s", __FUNCTION__);
 
     wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
@@ -1336,6 +1380,7 @@ free_wrk:
 out:
     return r;
 }
+#endif
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
