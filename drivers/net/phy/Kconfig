@@ -54,6 +54,11 @@ config VITESSE_PHY
         ---help---
           Currently supports the vsc8244
 
+config TERANETICS_PHY
+        tristate "Drivers for the Teranetics PHYs"
+        ---help---
+          Currently supports the Teranetics TN2020
+
 config SMSC_PHY
 	tristate "Drivers for SMSC PHYs"
 	---help---
@@ -191,7 +196,7 @@ config MDIO_BUS_MUX_GPIO
 
 config MDIO_BUS_MUX_MMIOREG
 	tristate "Support for MMIO device-controlled MDIO bus multiplexers"
-	depends on OF_MDIO
+	depends on OF_MDIO && HAS_IOMEM
 	select MDIO_BUS_MUX
 	help
 	  This module provides a driver for MDIO bus multiplexers that
