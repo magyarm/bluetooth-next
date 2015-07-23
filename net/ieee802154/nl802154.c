@@ -1123,8 +1123,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
         r = -ENOMEM;
         goto out;
     }
-    printk( KERN_INFO "snd_portid value: %d\n", info->snd_portid );
-    printk( KERN_INFO "snd_seq value: %d\n", info->snd_seq );
+
     hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ED_SCAN_CNF );
     if ( NULL == hdr ) {
         r = -ENOBUFS;
@@ -1166,9 +1165,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     }
 
     genlmsg_end( reply, hdr );
-    printk( KERN_INFO "After genlmsg_end \n" );
     r = genlmsg_reply( reply, info );
-    printk( KERN_INFO "After genlmsg_reply \n" );
     goto out;
 
 nla_put_failure:
@@ -1181,7 +1178,7 @@ out:
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
-    int r;
+    int r = 0;
 
     u8 scan_type;
     __le32 scan_channels;
@@ -1231,17 +1228,11 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
         goto out;
     }
 
-    printk( KERN_INFO "snd_portid value: %d\n", info->snd_portid );
-    printk( KERN_INFO "snd_seq value: %d\n", info->snd_seq );
-
-    printk( KERN_INFO " Netlink message size: %d\n", info->nlhdr->nlmsg_len );
-
     wrk->info = kzalloc( info->nlhdr->nlmsg_len, GFP_KERNEL );
-    memcpy( wrk->info, info, sizeof( struct genl_info ) );
+    memcpy( wrk->info, info, info->nlhdr->nlmsg_len );
 
     wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
     wrk->skb = skb;
-//    wrk->info = info;
     wrk->phy = &(rdev->wpan_phy);
     wrk->cmd_stuff.ed_scan.channel_page = channel_page;
     wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;

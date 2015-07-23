@@ -276,14 +276,13 @@ static int
 ieee802154_ed_scan_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 			u8 *level, u8 page, u8 duration)
 {
-	printk( KERN_INFO "In ieee802154_get_ed_scan \n" );
 
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	int ret = 0;
 
 	ASSERT_RTNL();
 
-	drv_ed_scan( local, level, page, duration );
+	ret = drv_ed_scan( local, level, page, duration );
 
 	return ret;
 }
@@ -291,17 +290,16 @@ ieee802154_ed_scan_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 int
 ieee802154_add_work( struct work802154 *wrk ) {
 
-	int ret = 0;
+	bool ret = true;
 	struct wpan_phy *phy;
 	struct ieee802154_local *local;
 
 	phy = wrk->phy;
 	local = wpan_phy_priv( phy );
 
-	printk( KERN_INFO "In ieee802154_add_work \n" );
 	ret = queue_work( local->workqueue, &(wrk->work) );
 
-	return ret;
+	return ret ? 0 : 1;
 }
 
 const struct cfg802154_ops mac802154_config_ops = {
