@@ -363,27 +363,69 @@ static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
 	struct atusb *atusb = hw->priv;
+	struct device *dev = &atusb->usb_dev->dev;
 	int ret;
+	int tries = 10;
 
 	/* This implicitly sets the CCA (Clear Channel Assessment) mode to 0,
 	 * "Mode 3a, Carrier sense OR energy above threshold".
 	 * We should probably make this configurable. @@@
 	 */
-	ret = atusb_write_reg(atusb, RG_PHY_CC_CCA, channel);
-	if (ret < 0)
-		return ret;
-	msleep(1);	/* @@@ ugly synchronization */
-	return 0;
+	for( ret = 1; 0 != ret && tries > 0; tries-- ) {
+        ret = atusb_write_reg(atusb, RG_PHY_CC_CCA, channel);
+        if (ret < 0) {
+            dev_err( dev, "atusb_write_reg failed (%d)\n", ret );
+            tries--;
+            msleep(1);  /* @@@ ugly synchronization */
+        }
+	}
+	return ret;
 }
 
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
     int r;
 
+    int prev_state;
+    int p_dbm;
+    bool retried = false;
     struct atusb *atusb = hw->priv;
     struct device *dev = &atusb->usb_dev->dev;
 
     BUG_ON(!level);
+
+read_state:
+    r = atusb_read_reg( atusb, RG_TRX_STATUS );
+    if ( r < 0 ) {
+        dev_err( dev, "failed to read reg TRX_STATUS (%d)\n", r );
+        goto out;
+    }
+    r &= 0x1f;
+    if ( STATE_RX_ON != r ) {
+        dev_dbg( dev, "read state %d not STATE_RX_ON (0x%x)\n", r, STATE_RX_ON );
+        if ( retried ) {
+            r = -EALREADY;
+            goto out;
+        }
+        r = atusb_write_reg( atusb, RG_TRX_STATE, STATE_RX_ON );
+        if ( r < 0 ) {
+            dev_err( dev, "failed to write reg TRX_STATE (%d)\n", r );
+            goto out;
+        }
+        udelay( 150 );
+        retried = true;
+        goto read_state;
+    }
+    r = atusb_read_reg( atusb, RG_PHY_RSSI );
+    if ( r < 0 ) {
+        dev_err( dev, "failed to read reg PHY_RSSI (%d)\n", r );
+        goto out;
+    }
+    p_dbm = -91 + 3 * ( r - 1 );
+    dev_dbg( dev, "power in dBm is %d\n", p_dbm );
+    *level = ( r % 28 ) * 9;
+    dev_dbg( dev, "power in [0,256) is %u\n", *level );
+/*
     r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
     if (0xff == r) {
         r = atusb_write_reg(atusb, RG_PHY_ED_LEVEL, 0x00);
@@ -399,6 +441,7 @@ static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
     // valid values are [0x00,0x54]
     // we need to scale to [0x00,0xff]
     *level = r * 3;
+*/
     r = 0;
 out:
 	return r;
