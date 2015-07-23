@@ -1,4 +1,5 @@
 #include "relocs.h"
+#include "reloc_x86_64.h"
 
 #define ELF_BITS 64
 
