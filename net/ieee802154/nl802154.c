@@ -1165,6 +1165,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     }
 
     genlmsg_end( reply, hdr );
+
     r = genlmsg_reply( reply, info );
     goto out;
 
@@ -1187,7 +1188,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 
 	struct cfg802154_registered_device *rdev;
 	struct net_device *dev = info->user_ptr[1];
-		struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	struct work802154 *wrk;
 
