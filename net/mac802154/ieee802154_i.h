@@ -53,8 +53,6 @@ struct ieee802154_local {
 	 */
 	struct workqueue_struct	*workqueue;
 
-	struct work_struct scan_work;
-
 	struct hrtimer ifs_timer;
 
 	bool started;
@@ -170,9 +168,6 @@ void mac802154_get_table(struct net_device *dev,
 void mac802154_unlock_table(struct net_device *dev);
 
 int mac802154_wpan_update_llsec(struct net_device *dev);
-
-/* scan/BSS handling */
-void ieee802154_scan_work(struct work_struct *work);
 
 /* interface handling */
 int ieee802154_iface_init(void);
