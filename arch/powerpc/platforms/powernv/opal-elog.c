@@ -237,7 +237,7 @@ static struct elog_obj *create_elog_obj(uint64_t id, size_t size, uint64_t type)
 	return elog;
 }
 
-static irqreturn_t elog_event(int irq, void *data)
+static void elog_work_fn(struct work_struct *work)
 {
 	__be64 size;
 	__be64 id;
@@ -251,7 +251,7 @@ static irqreturn_t elog_event(int irq, void *data)
 	rc = opal_get_elog_size(&id, &size, &type);
 	if (rc != OPAL_SUCCESS) {
 		pr_err("ELOG: OPAL log info read failed\n");
-		return IRQ_HANDLED;
+		return;
 	}
 
 	elog_size = be64_to_cpu(size);
@@ -270,10 +270,16 @@ static irqreturn_t elog_event(int irq, void *data)
 	 * entries.
 	 */
 	if (kset_find_obj(elog_kset, name))
-		return IRQ_HANDLED;
+		return;
 
 	create_elog_obj(log_id, elog_size, elog_type);
+}
 
+static DECLARE_WORK(elog_work, elog_work_fn);
+
+static irqreturn_t elog_event(int irq, void *data)
+{
+	schedule_work(&elog_work);
 	return IRQ_HANDLED;
 }
 
@@ -298,8 +304,8 @@ int __init opal_elog_init(void)
 		return irq;
 	}
 
-	rc = request_threaded_irq(irq, NULL, elog_event,
-			IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "opal-elog", NULL);
+	rc = request_irq(irq, elog_event,
+			IRQ_TYPE_LEVEL_HIGH, "opal-elog", NULL);
 	if (rc) {
 		pr_err("%s: Can't request OPAL event irq (%d)\n",
 		       __func__, rc);

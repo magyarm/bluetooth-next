@@ -516,17 +516,17 @@ static void gen8_ppgtt_clear_range(struct i915_address_space *vm,
 		struct page *page_table;
 
 		if (WARN_ON(!ppgtt->pdp.page_directory[pdpe]))
-			break;
+			continue;
 
 		pd = ppgtt->pdp.page_directory[pdpe];
 
 		if (WARN_ON(!pd->page_table[pde]))
-			break;
+			continue;
 
 		pt = pd->page_table[pde];
 
 		if (WARN_ON(!pt->page))
-			break;
+			continue;
 
 		page_table = pt->page;
 
@@ -1723,6 +1723,9 @@ void i915_gem_suspend_gtt_mappings(struct drm_device *dev)
 
 int i915_gem_gtt_prepare_object(struct drm_i915_gem_object *obj)
 {
+	if (obj->has_dma_mapping)
+		return 0;
+
 	if (!dma_map_sg(&obj->base.dev->pdev->dev,
 			obj->pages->sgl, obj->pages->nents,
 			PCI_DMA_BIDIRECTIONAL))
@@ -1969,8 +1972,10 @@ void i915_gem_gtt_finish_object(struct drm_i915_gem_object *obj)
 
 	interruptible = do_idling(dev_priv);
 
-	dma_unmap_sg(&dev->pdev->dev, obj->pages->sgl, obj->pages->nents,
-		     PCI_DMA_BIDIRECTIONAL);
+	if (!obj->has_dma_mapping)
+		dma_unmap_sg(&dev->pdev->dev,
+			     obj->pages->sgl, obj->pages->nents,
+			     PCI_DMA_BIDIRECTIONAL);
 
 	undo_idling(dev_priv, interruptible);
 }
@@ -2541,8 +2546,6 @@ void i915_gem_restore_gtt_mappings(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_i915_gem_object *obj;
 	struct i915_address_space *vm;
-	struct i915_vma *vma;
-	bool flush;
 
 	i915_check_and_clear_faults(dev);
 
@@ -2552,23 +2555,16 @@ void i915_gem_restore_gtt_mappings(struct drm_device *dev)
 				       dev_priv->gtt.base.total,
 				       true);
 
-	/* Cache flush objects bound into GGTT and rebind them. */
-	vm = &dev_priv->gtt.base;
 	list_for_each_entry(obj, &dev_priv->mm.bound_list, global_list) {
-		flush = false;
-		list_for_each_entry(vma, &obj->vma_list, vma_link) {
-			if (vma->vm != vm)
-				continue;
+		struct i915_vma *vma = i915_gem_obj_to_vma(obj,
+							   &dev_priv->gtt.base);
+		if (!vma)
+			continue;
 
-			WARN_ON(i915_vma_bind(vma, obj->cache_level,
-					      PIN_UPDATE));
-
-			flush = true;
-		}
-
-		if (flush)
-			i915_gem_clflush_object(obj, obj->pin_display);
+		i915_gem_clflush_object(obj, obj->pin_display);
+		WARN_ON(i915_vma_bind(vma, obj->cache_level, PIN_UPDATE));
 	}
+
 
 	if (INTEL_INFO(dev)->gen >= 8) {
 		if (IS_CHERRYVIEW(dev) || IS_BROXTON(dev))

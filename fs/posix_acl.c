@@ -547,45 +547,51 @@ posix_acl_create(struct inode *dir, umode_t *mode,
 		struct posix_acl **default_acl, struct posix_acl **acl)
 {
 	struct posix_acl *p;
-	struct posix_acl *clone;
 	int ret;
 
-	*acl = NULL;
-	*default_acl = NULL;
-
 	if (S_ISLNK(*mode) || !IS_POSIXACL(dir))
-		return 0;
+		goto no_acl;
 
 	p = get_acl(dir, ACL_TYPE_DEFAULT);
-	if (!p || p == ERR_PTR(-EOPNOTSUPP)) {
-		*mode &= ~current_umask();
-		return 0;
-	}
-	if (IS_ERR(p))
+	if (IS_ERR(p)) {
+		if (p == ERR_PTR(-EOPNOTSUPP))
+			goto apply_umask;
 		return PTR_ERR(p);
+	}
 
-	clone = posix_acl_clone(p, GFP_NOFS);
-	if (!clone)
+	if (!p)
+		goto apply_umask;
+
+	*acl = posix_acl_clone(p, GFP_NOFS);
+	if (!*acl)
 		goto no_mem;
 
-	ret = posix_acl_create_masq(clone, mode);
+	ret = posix_acl_create_masq(*acl, mode);
 	if (ret < 0)
 		goto no_mem_clone;
 
-	if (ret == 0)
-		posix_acl_release(clone);
-	else
-		*acl = clone;
+	if (ret == 0) {
+		posix_acl_release(*acl);
+		*acl = NULL;
+	}
 
-	if (!S_ISDIR(*mode))
+	if (!S_ISDIR(*mode)) {
 		posix_acl_release(p);
-	else
+		*default_acl = NULL;
+	} else {
 		*default_acl = p;
+	}
+	return 0;
 
+apply_umask:
+	*mode &= ~current_umask();
+no_acl:
+	*default_acl = NULL;
+	*acl = NULL;
 	return 0;
 
 no_mem_clone:
-	posix_acl_release(clone);
+	posix_acl_release(*acl);
 no_mem:
 	posix_acl_release(p);
 	return -ENOMEM;

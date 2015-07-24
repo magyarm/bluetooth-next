@@ -327,8 +327,7 @@ static int fscache_alloc_object(struct fscache_cache *cache,
 
 object_already_extant:
 	ret = -ENOBUFS;
-	if (fscache_object_is_dying(object) ||
-	    fscache_cache_is_broken(object)) {
+	if (fscache_object_is_dead(object)) {
 		spin_unlock(&cookie->lock);
 		goto error;
 	}
@@ -672,7 +671,7 @@ int __fscache_check_consistency(struct fscache_cookie *cookie)
 	if (!op)
 		return -ENOMEM;
 
-	fscache_operation_init(op, NULL, NULL, NULL);
+	fscache_operation_init(op, NULL, NULL);
 	op->flags = FSCACHE_OP_MYTHREAD |
 		(1 << FSCACHE_OP_WAITING) |
 		(1 << FSCACHE_OP_UNUSE_COOKIE);
@@ -696,7 +695,8 @@ int __fscache_check_consistency(struct fscache_cookie *cookie)
 	/* the work queue now carries its own ref on the object */
 	spin_unlock(&cookie->lock);
 
-	ret = fscache_wait_for_operation_activation(object, op, NULL, NULL);
+	ret = fscache_wait_for_operation_activation(object, op,
+						    NULL, NULL, NULL);
 	if (ret == 0) {
 		/* ask the cache to honour the operation */
 		ret = object->cache->ops->check_consistency(op);

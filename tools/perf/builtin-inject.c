@@ -630,13 +630,12 @@ int cmd_inject(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (inject.session == NULL)
 		return -1;
 
-	ret = symbol__init(&inject.session->header.env);
-	if (ret < 0)
-		goto out_delete;
+	if (symbol__init(&inject.session->header.env) < 0)
+		return -1;
 
 	ret = __cmd_inject(&inject);
 
-out_delete:
 	perf_session__delete(inject.session);
+
 	return ret;
 }

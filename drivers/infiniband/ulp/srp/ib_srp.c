@@ -161,10 +161,13 @@ static int srp_tmo_set(const char *val, const struct kernel_param *kp)
 {
 	int tmo, res;
 
-	res = srp_parse_tmo(&tmo, val);
-	if (res)
-		goto out;
-
+	if (strncmp(val, "off", 3) != 0) {
+		res = kstrtoint(val, 0, &tmo);
+		if (res)
+			goto out;
+	} else {
+		tmo = -1;
+	}
 	if (kp->arg == &srp_reconnect_delay)
 		res = srp_tmo_valid(tmo, srp_fast_io_fail_tmo,
 				    srp_dev_loss_tmo);
@@ -3376,7 +3379,7 @@ static void srp_add_one(struct ib_device *device)
 	struct srp_device *srp_dev;
 	struct ib_device_attr *dev_attr;
 	struct srp_host *host;
-	int mr_page_shift, p;
+	int mr_page_shift, s, e, p;
 	u64 max_pages_per_mr;
 
 	dev_attr = kmalloc(sizeof *dev_attr, GFP_KERNEL);
@@ -3440,7 +3443,15 @@ static void srp_add_one(struct ib_device *device)
 	if (IS_ERR(srp_dev->mr))
 		goto err_pd;
 
-	for (p = rdma_start_port(device); p <= rdma_end_port(device); ++p) {
+	if (device->node_type == RDMA_NODE_IB_SWITCH) {
+		s = 0;
+		e = 0;
+	} else {
+		s = 1;
+		e = device->phys_port_cnt;
+	}
+
+	for (p = s; p <= e; ++p) {
 		host = srp_add_port(srp_dev, p);
 		if (host)
 			list_add_tail(&host->list, &srp_dev->dev_list);

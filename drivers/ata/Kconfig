@@ -48,7 +48,7 @@ config ATA_VERBOSE_ERROR
 
 config ATA_ACPI
 	bool "ATA ACPI Support"
-	depends on ACPI
+	depends on ACPI && PCI
 	default y
 	help
 	  This option adds support for ATA-related ACPI objects.

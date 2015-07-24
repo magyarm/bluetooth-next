@@ -124,6 +124,7 @@ static int report_raw_events(struct perf_mem *mem)
 		.mode = PERF_DATA_MODE_READ,
 		.force = mem->force,
 	};
+	int err = -EINVAL;
 	int ret;
 	struct perf_session *session = perf_session__new(&file, false,
 							 &mem->tool);
@@ -134,21 +135,24 @@ static int report_raw_events(struct perf_mem *mem)
 	if (mem->cpu_list) {
 		ret = perf_session__cpu_bitmap(session, mem->cpu_list,
 					       mem->cpu_bitmap);
-		if (ret < 0)
+		if (ret)
 			goto out_delete;
 	}
 
-	ret = symbol__init(&session->header.env);
-	if (ret < 0)
-		goto out_delete;
+	if (symbol__init(&session->header.env) < 0)
+		return -1;
 
 	printf("# PID, TID, IP, ADDR, LOCAL WEIGHT, DSRC, SYMBOL\n");
 
-	ret = perf_session__process_events(session);
+	err = perf_session__process_events(session);
+	if (err)
+		return err;
+
+	return 0;
 
 out_delete:
 	perf_session__delete(session);
-	return ret;
+	return err;
 }
 
 static int report_events(int argc, const char **argv, struct perf_mem *mem)

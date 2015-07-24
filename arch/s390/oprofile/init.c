@@ -16,7 +16,6 @@
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <asm/processor.h>
-#include <asm/perf_event.h>
 
 #include "../../../drivers/oprofile/oprof.h"
 

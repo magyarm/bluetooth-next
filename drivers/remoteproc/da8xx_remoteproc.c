@@ -26,7 +26,8 @@
 static char *da8xx_fw_name;
 module_param(da8xx_fw_name, charp, S_IRUGO);
 MODULE_PARM_DESC(da8xx_fw_name,
-		 "Name of DSP firmware file in /lib/firmware (if not specified defaults to 'rproc-dsp-fw')");
+		 "\n\t\tName of DSP firmware file in /lib/firmware"
+		 " (if not specified defaults to 'rproc-dsp-fw')");
 
 /*
  * OMAP-L138 Technical References:

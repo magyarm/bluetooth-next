@@ -493,35 +493,38 @@ int radeon_vm_bo_set_addr(struct radeon_device *rdev,
 	}
 
 	if (bo_va->it.start || bo_va->it.last) {
-		/* add a clone of the bo_va to clear the old address */
-		struct radeon_bo_va *tmp;
-		tmp = kzalloc(sizeof(struct radeon_bo_va), GFP_KERNEL);
-		if (!tmp) {
-			mutex_unlock(&vm->mutex);
-			r = -ENOMEM;
-			goto error_unreserve;
+		spin_lock(&vm->status_lock);
+		if (list_empty(&bo_va->vm_status)) {
+			/* add a clone of the bo_va to clear the old address */
+			struct radeon_bo_va *tmp;
+			spin_unlock(&vm->status_lock);
+			tmp = kzalloc(sizeof(struct radeon_bo_va), GFP_KERNEL);
+			if (!tmp) {
+				mutex_unlock(&vm->mutex);
+				r = -ENOMEM;
+				goto error_unreserve;
+			}
+			tmp->it.start = bo_va->it.start;
+			tmp->it.last = bo_va->it.last;
+			tmp->vm = vm;
+			tmp->bo = radeon_bo_ref(bo_va->bo);
+			spin_lock(&vm->status_lock);
+			list_add(&tmp->vm_status, &vm->freed);
 		}
-		tmp->it.start = bo_va->it.start;
-		tmp->it.last = bo_va->it.last;
-		tmp->vm = vm;
-		tmp->bo = radeon_bo_ref(bo_va->bo);
+		spin_unlock(&vm->status_lock);
 
 		interval_tree_remove(&bo_va->it, &vm->va);
-		spin_lock(&vm->status_lock);
 		bo_va->it.start = 0;
 		bo_va->it.last = 0;
-		list_del_init(&bo_va->vm_status);
-		list_add(&tmp->vm_status, &vm->freed);
-		spin_unlock(&vm->status_lock);
 	}
 
 	if (soffset || eoffset) {
-		spin_lock(&vm->status_lock);
 		bo_va->it.start = soffset;
 		bo_va->it.last = eoffset - 1;
+		interval_tree_insert(&bo_va->it, &vm->va);
+		spin_lock(&vm->status_lock);
 		list_add(&bo_va->vm_status, &vm->cleared);
 		spin_unlock(&vm->status_lock);
-		interval_tree_insert(&bo_va->it, &vm->va);
 	}
 
 	bo_va->flags = flags;
@@ -1126,12 +1129,12 @@ void radeon_vm_bo_rmv(struct radeon_device *rdev,
 		interval_tree_remove(&bo_va->it, &vm->va);
 
 	spin_lock(&vm->status_lock);
-	list_del(&bo_va->vm_status);
-	if (bo_va->it.start || bo_va->it.last) {
+	if (list_empty(&bo_va->vm_status)) {
 		bo_va->bo = radeon_bo_ref(bo_va->bo);
 		list_add(&bo_va->vm_status, &vm->freed);
 	} else {
 		radeon_fence_unref(&bo_va->last_pt_update);
+		list_del(&bo_va->vm_status);
 		kfree(bo_va);
 	}
 	spin_unlock(&vm->status_lock);
@@ -1155,8 +1158,7 @@ void radeon_vm_bo_invalidate(struct radeon_device *rdev,
 
 	list_for_each_entry(bo_va, &bo->va, bo_list) {
 		spin_lock(&bo_va->vm->status_lock);
-		if (list_empty(&bo_va->vm_status) &&
-		    (bo_va->it.start || bo_va->it.last))
+		if (list_empty(&bo_va->vm_status))
 			list_add(&bo_va->vm_status, &bo_va->vm->invalidated);
 		spin_unlock(&bo_va->vm->status_lock);
 	}

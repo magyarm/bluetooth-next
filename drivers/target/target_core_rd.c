@@ -33,6 +33,7 @@
 
 #include <target/target_core_base.h>
 #include <target/target_core_backend.h>
+#include <target/target_core_backend_configfs.h>
 
 #include "target_core_rd.h"
 
@@ -41,6 +42,10 @@ static inline struct rd_dev *RD_DEV(struct se_device *dev)
 	return container_of(dev, struct rd_dev, dev);
 }
 
+/*	rd_attach_hba(): (Part of se_subsystem_api_t template)
+ *
+ *
+ */
 static int rd_attach_hba(struct se_hba *hba, u32 host_id)
 {
 	struct rd_host *rd_host;
@@ -57,7 +62,7 @@ static int rd_attach_hba(struct se_hba *hba, u32 host_id)
 
 	pr_debug("CORE_HBA[%d] - TCM Ramdisk HBA Driver %s on"
 		" Generic Target Core Stack %s\n", hba->hba_id,
-		RD_HBA_VERSION, TARGET_CORE_VERSION);
+		RD_HBA_VERSION, TARGET_CORE_MOD_VERSION);
 
 	return 0;
 }
@@ -349,20 +354,12 @@ fail:
 	return ret;
 }
 
-static void rd_dev_call_rcu(struct rcu_head *p)
-{
-	struct se_device *dev = container_of(p, struct se_device, rcu_head);
-	struct rd_dev *rd_dev = RD_DEV(dev);
-
-	kfree(rd_dev);
-}
-
 static void rd_free_device(struct se_device *dev)
 {
 	struct rd_dev *rd_dev = RD_DEV(dev);
 
 	rd_release_device_space(rd_dev);
-	call_rcu(&dev->rcu_head, rd_dev_call_rcu);
+	kfree(rd_dev);
 }
 
 static struct rd_dev_sg_table *rd_get_sg_table(struct rd_dev *rd_dev, u32 page)
@@ -405,7 +402,10 @@ static struct rd_dev_sg_table *rd_get_prot_table(struct rd_dev *rd_dev, u32 page
 	return NULL;
 }
 
-static sense_reason_t rd_do_prot_rw(struct se_cmd *cmd, bool is_read)
+typedef sense_reason_t (*dif_verify)(struct se_cmd *, sector_t, unsigned int,
+				     unsigned int, struct scatterlist *, int);
+
+static sense_reason_t rd_do_prot_rw(struct se_cmd *cmd, dif_verify dif_verify)
 {
 	struct se_device *se_dev = cmd->se_dev;
 	struct rd_dev *dev = RD_DEV(se_dev);
@@ -465,16 +465,7 @@ static sense_reason_t rd_do_prot_rw(struct se_cmd *cmd, bool is_read)
 
 #endif /* !CONFIG_ARCH_HAS_SG_CHAIN */
 
-	if (is_read)
-		rc = sbc_dif_verify(cmd, cmd->t_task_lba, sectors, 0,
-				    prot_sg, prot_offset);
-	else
-		rc = sbc_dif_verify(cmd, cmd->t_task_lba, sectors, 0,
-				    cmd->t_prot_sg, 0);
-
-	if (!rc)
-		sbc_dif_copy_prot(cmd, sectors, is_read, prot_sg, prot_offset);
-
+	rc = dif_verify(cmd, cmd->t_task_lba, sectors, 0, prot_sg, prot_offset);
 	if (need_to_release)
 		kfree(prot_sg);
 
@@ -520,7 +511,7 @@ rd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 
 	if (cmd->prot_type && se_dev->dev_attrib.pi_prot_type &&
 	    data_direction == DMA_TO_DEVICE) {
-		rc = rd_do_prot_rw(cmd, false);
+		rc = rd_do_prot_rw(cmd, sbc_dif_verify_write);
 		if (rc)
 			return rc;
 	}
@@ -588,7 +579,7 @@ rd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 
 	if (cmd->prot_type && se_dev->dev_attrib.pi_prot_type &&
 	    data_direction == DMA_FROM_DEVICE) {
-		rc = rd_do_prot_rw(cmd, true);
+		rc = rd_do_prot_rw(cmd, sbc_dif_verify_read);
 		if (rc)
 			return rc;
 	}
@@ -702,7 +693,42 @@ rd_parse_cdb(struct se_cmd *cmd)
 	return sbc_parse_cdb(cmd, &rd_sbc_ops);
 }
 
-static const struct target_backend_ops rd_mcp_ops = {
+DEF_TB_DEFAULT_ATTRIBS(rd_mcp);
+
+static struct configfs_attribute *rd_mcp_backend_dev_attrs[] = {
+	&rd_mcp_dev_attrib_emulate_model_alias.attr,
+	&rd_mcp_dev_attrib_emulate_dpo.attr,
+	&rd_mcp_dev_attrib_emulate_fua_write.attr,
+	&rd_mcp_dev_attrib_emulate_fua_read.attr,
+	&rd_mcp_dev_attrib_emulate_write_cache.attr,
+	&rd_mcp_dev_attrib_emulate_ua_intlck_ctrl.attr,
+	&rd_mcp_dev_attrib_emulate_tas.attr,
+	&rd_mcp_dev_attrib_emulate_tpu.attr,
+	&rd_mcp_dev_attrib_emulate_tpws.attr,
+	&rd_mcp_dev_attrib_emulate_caw.attr,
+	&rd_mcp_dev_attrib_emulate_3pc.attr,
+	&rd_mcp_dev_attrib_pi_prot_type.attr,
+	&rd_mcp_dev_attrib_hw_pi_prot_type.attr,
+	&rd_mcp_dev_attrib_pi_prot_format.attr,
+	&rd_mcp_dev_attrib_enforce_pr_isids.attr,
+	&rd_mcp_dev_attrib_is_nonrot.attr,
+	&rd_mcp_dev_attrib_emulate_rest_reord.attr,
+	&rd_mcp_dev_attrib_force_pr_aptpl.attr,
+	&rd_mcp_dev_attrib_hw_block_size.attr,
+	&rd_mcp_dev_attrib_block_size.attr,
+	&rd_mcp_dev_attrib_hw_max_sectors.attr,
+	&rd_mcp_dev_attrib_optimal_sectors.attr,
+	&rd_mcp_dev_attrib_hw_queue_depth.attr,
+	&rd_mcp_dev_attrib_queue_depth.attr,
+	&rd_mcp_dev_attrib_max_unmap_lba_count.attr,
+	&rd_mcp_dev_attrib_max_unmap_block_desc_count.attr,
+	&rd_mcp_dev_attrib_unmap_granularity.attr,
+	&rd_mcp_dev_attrib_unmap_granularity_alignment.attr,
+	&rd_mcp_dev_attrib_max_write_same_len.attr,
+	NULL,
+};
+
+static struct se_subsystem_api rd_mcp_template = {
 	.name			= "rd_mcp",
 	.inquiry_prod		= "RAMDISK-MCP",
 	.inquiry_rev		= RD_MCP_VERSION,
@@ -718,15 +744,25 @@ static const struct target_backend_ops rd_mcp_ops = {
 	.get_blocks		= rd_get_blocks,
 	.init_prot		= rd_init_prot,
 	.free_prot		= rd_free_prot,
-	.tb_dev_attrib_attrs	= sbc_attrib_attrs,
 };
 
 int __init rd_module_init(void)
 {
-	return transport_backend_register(&rd_mcp_ops);
+	struct target_backend_cits *tbc = &rd_mcp_template.tb_cits;
+	int ret;
+
+	target_core_setup_sub_cits(&rd_mcp_template);
+	tbc->tb_dev_attrib_cit.ct_attrs = rd_mcp_backend_dev_attrs;
+
+	ret = transport_subsystem_register(&rd_mcp_template);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return 0;
 }
 
 void rd_module_exit(void)
 {
-	target_backend_unregister(&rd_mcp_ops);
+	transport_subsystem_release(&rd_mcp_template);
 }

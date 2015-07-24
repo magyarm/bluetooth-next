@@ -17,7 +17,6 @@
 #include "parse-events-flex.h"
 #include "pmu.h"
 #include "thread_map.h"
-#include "cpumap.h"
 #include "asm/bug.h"
 
 #define MAX_NAME_LEN 100
@@ -286,9 +285,7 @@ __add_event(struct list_head *list, int *idx,
 	if (!evsel)
 		return NULL;
 
-	if (cpus)
-		evsel->cpus = cpu_map__get(cpus);
-
+	evsel->cpus = cpus;
 	if (name)
 		evsel->name = strdup(name);
 	list_add_tail(&evsel->node, list);

@@ -203,7 +203,7 @@ static ssize_t srp_show_tmo(char *buf, int tmo)
 	return tmo >= 0 ? sprintf(buf, "%d\n", tmo) : sprintf(buf, "off\n");
 }
 
-int srp_parse_tmo(int *tmo, const char *buf)
+static int srp_parse_tmo(int *tmo, const char *buf)
 {
 	int res = 0;
 
@@ -214,7 +214,6 @@ int srp_parse_tmo(int *tmo, const char *buf)
 
 	return res;
 }
-EXPORT_SYMBOL(srp_parse_tmo);
 
 static ssize_t show_reconnect_delay(struct device *dev,
 				    struct device_attribute *attr, char *buf)

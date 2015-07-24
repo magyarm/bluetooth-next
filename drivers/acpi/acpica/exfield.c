@@ -428,7 +428,7 @@ acpi_ex_write_data_to_field(union acpi_operand_object *source_desc,
 		}
 
 		buffer = buffer_desc->buffer.pointer;
-		memcpy(buffer, source_desc->buffer.pointer, length);
+		ACPI_MEMCPY(buffer, source_desc->buffer.pointer, length);
 
 		/* Lock entire transaction if requested */
 

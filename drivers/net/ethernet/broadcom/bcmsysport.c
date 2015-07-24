@@ -1793,7 +1793,7 @@ static int bcm_sysport_probe(struct platform_device *pdev)
 	macaddr = of_get_mac_address(dn);
 	if (!macaddr || !is_valid_ether_addr(macaddr)) {
 		dev_warn(&pdev->dev, "using random Ethernet MAC\n");
-		eth_hw_addr_random(dev);
+		random_ether_addr(dev->dev_addr);
 	} else {
 		ether_addr_copy(dev->dev_addr, macaddr);
 	}

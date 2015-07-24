@@ -5,15 +5,16 @@
 #   IPv6 as module will cause a CRASH if you try to unload it
 menuconfig IPV6
 	tristate "The IPv6 protocol"
-	default y
+	default m
 	---help---
-	  Support for IP version 6 (IPv6).
+	  This is complemental support for the IP version 6.
+	  You will still be able to do traditional IPv4 networking as well.
 
 	  For general information about IPv6, see
 	  <https://en.wikipedia.org/wiki/IPv6>.
-	  For specific information about IPv6 under Linux, see
-	  Documentation/networking/ipv6.txt and read the HOWTO at
-	  <http://www.tldp.org/HOWTO/Linux+IPv6-HOWTO/>
+	  For Linux IPv6 development information, see <http://www.linux-ipv6.org>.
+	  For specific information about IPv6 under Linux, read the HOWTO at
+	  <http://www.bieringer.de/linux/IPv6/>.
 
 	  To compile this protocol support as a module, choose M here: the 
 	  module will be called ipv6.

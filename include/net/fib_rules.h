@@ -19,7 +19,6 @@ struct fib_rule {
 	u8			action;
 	/* 3 bytes hole, try to use */
 	u32			target;
-	__be64			tun_id;
 	struct fib_rule __rcu	*ctarget;
 	struct net		*fr_net;
 

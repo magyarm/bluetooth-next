@@ -35,7 +35,7 @@
  */
 
 #include "core.h"
-#include "node.h"
+#include "link.h"
 #include "discover.h"
 
 /* min delay during bearer start up */
@@ -125,6 +125,7 @@ void tipc_disc_rcv(struct net *net, struct sk_buff *buf,
 {
 	struct tipc_net *tn = net_generic(net, tipc_net_id);
 	struct tipc_node *node;
+	struct tipc_link *link;
 	struct tipc_media_addr maddr;
 	struct sk_buff *rbuf;
 	struct tipc_msg *msg = buf_msg(buf);
@@ -169,10 +170,13 @@ void tipc_disc_rcv(struct net *net, struct sk_buff *buf,
 		return;
 	tipc_node_lock(node);
 	node->capabilities = caps;
+	link = node->links[bearer->identity];
 
 	/* Prepare to validate requesting node's signature and media address */
 	sign_match = (signature == node->signature);
-	tipc_node_check_dest(node, bearer, &link_up, &addr_match, &maddr);
+	addr_match = link && !memcmp(&link->media_addr, &maddr, sizeof(maddr));
+	link_up = link && tipc_link_is_up(link);
+
 
 	/* These three flags give us eight permutations: */
 
@@ -235,8 +239,16 @@ void tipc_disc_rcv(struct net *net, struct sk_buff *buf,
 	if (accept_sign)
 		node->signature = signature;
 
-	if (accept_addr && !tipc_node_update_dest(node, bearer, &maddr))
-		respond = false;
+	if (accept_addr) {
+		if (!link)
+			link = tipc_link_create(node, bearer, &maddr);
+		if (link) {
+			memcpy(&link->media_addr, &maddr, sizeof(maddr));
+			tipc_link_reset(link);
+		} else {
+			respond = false;
+		}
+	}
 
 	/* Send response, if necessary */
 	if (respond && (mtyp == DSC_REQ_MSG)) {

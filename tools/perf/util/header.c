@@ -1063,7 +1063,8 @@ out:
 	free(buf);
 	return events;
 error:
-	free_event_desc(events);
+	if (events)
+		free_event_desc(events);
 	events = NULL;
 	goto out;
 }

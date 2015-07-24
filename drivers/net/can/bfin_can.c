@@ -424,9 +424,10 @@ static void bfin_can_rx(struct net_device *dev, u16 isrc)
 		cf->data[6 - i] = (6 - i) < cf->can_dlc ? (val >> 8) : 0;
 	}
 
+	netif_rx(skb);
+
 	stats->rx_packets++;
 	stats->rx_bytes += cf->can_dlc;
-	netif_rx(skb);
 }
 
 static int bfin_can_err(struct net_device *dev, u16 isrc, u16 status)
@@ -507,9 +508,10 @@ static int bfin_can_err(struct net_device *dev, u16 isrc, u16 status)
 
 	priv->can.state = state;
 
+	netif_rx(skb);
+
 	stats->rx_packets++;
 	stats->rx_bytes += cf->can_dlc;
-	netif_rx(skb);
 
 	return 0;
 }

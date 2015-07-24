@@ -303,7 +303,6 @@ struct auxtrace_record {
 				      const char *str);
 	u64 (*reference)(struct auxtrace_record *itr);
 	int (*read_finish)(struct auxtrace_record *itr, int idx);
-	unsigned int alignment;
 };
 
 #ifdef HAVE_AUXTRACE_SUPPORT

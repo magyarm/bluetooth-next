@@ -119,24 +119,18 @@ void read_persistent_clock(struct timespec *ts)
 
 int get_c0_fdc_int(void)
 {
-	/*
-	 * Some cores claim the FDC is routable through the GIC, but it doesn't
-	 * actually seem to be connected for those Malta bitstreams.
-	 */
-	switch (current_cpu_type()) {
-	case CPU_INTERAPTIV:
-	case CPU_PROAPTIV:
-		return -1;
-	};
+	int mips_cpu_fdc_irq;
 
 	if (cpu_has_veic)
-		return -1;
+		mips_cpu_fdc_irq = -1;
 	else if (gic_present)
-		return gic_get_c0_fdc_int();
+		mips_cpu_fdc_irq = gic_get_c0_fdc_int();
 	else if (cp0_fdc_irq >= 0)
-		return MIPS_CPU_IRQ_BASE + cp0_fdc_irq;
+		mips_cpu_fdc_irq = MIPS_CPU_IRQ_BASE + cp0_fdc_irq;
 	else
-		return -1;
+		mips_cpu_fdc_irq = -1;
+
+	return mips_cpu_fdc_irq;
 }
 
 int get_c0_perfcount_int(void)

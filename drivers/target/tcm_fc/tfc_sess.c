@@ -36,6 +36,7 @@
 
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
+#include <target/target_core_configfs.h>
 #include <target/configfs_macros.h>
 
 #include "tcm_fc.h"

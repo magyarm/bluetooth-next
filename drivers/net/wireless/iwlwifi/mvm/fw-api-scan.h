@@ -660,8 +660,7 @@ struct iwl_scan_config {
  * iwl_umac_scan_flags
  *@IWL_UMAC_SCAN_FLAG_PREEMPTIVE: scan process triggered by this scan request
  *	can be preempted by other scan requests with higher priority.
- *	The low priority scan will be resumed when the higher proirity scan is
- *	completed.
+ *	The low priority scan is aborted.
  *@IWL_UMAC_SCAN_FLAG_START_NOTIF: notification will be sent to the driver
  *	when scan starts.
  */

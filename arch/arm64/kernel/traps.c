@@ -335,7 +335,7 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 	if (call_undef_hook(regs) == 0)
 		return;
 
-	if (unhandled_signal(current, SIGILL) && show_unhandled_signals_ratelimited()) {
+	if (show_unhandled_signals_ratelimited() && unhandled_signal(current, SIGILL)) {
 		pr_info("%s[%d]: undefined instruction: pc=%p\n",
 			current->comm, task_pid_nr(current), pc);
 		dump_instr(KERN_INFO, regs);

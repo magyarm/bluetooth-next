@@ -241,8 +241,6 @@ struct efx_tx_queue {
 	unsigned int read_count ____cacheline_aligned_in_smp;
 	unsigned int old_write_count;
 	unsigned int merge_events;
-	unsigned int bytes_compl;
-	unsigned int pkts_compl;
 
 	/* Members used only on the xmit path */
 	unsigned int insert_count ____cacheline_aligned_in_smp;
@@ -925,7 +923,6 @@ struct vfdi_status;
  * @stats_lock: Statistics update lock. Must be held when calling
  *	efx_nic_type::{update,start,stop}_stats.
  * @n_rx_noskb_drops: Count of RX packets dropped due to failure to allocate an skb
- * @mc_promisc: Whether in multicast promiscuous mode when last changed
  *
  * This is stored in the private area of the &struct net_device.
  */
@@ -1073,7 +1070,6 @@ struct efx_nic {
 	int last_irq_cpu;
 	spinlock_t stats_lock;
 	atomic_t n_rx_noskb_drops;
-	bool mc_promisc;
 };
 
 static inline int efx_dev_registered(struct efx_nic *efx)

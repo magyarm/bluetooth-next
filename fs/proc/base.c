@@ -243,11 +243,6 @@ static ssize_t proc_pid_cmdline_read(struct file *file, char __user *buf,
 	len1 = arg_end - arg_start;
 	len2 = env_end - env_start;
 
-	/* Empty ARGV. */
-	if (len1 == 0) {
-		rv = 0;
-		goto out_free_page;
-	}
 	/*
 	 * Inherently racy -- command line shares address space
 	 * with code and data.
@@ -496,17 +491,14 @@ static int proc_pid_stack(struct seq_file *m, struct pid_namespace *ns,
 }
 #endif
 
-#ifdef CONFIG_SCHED_INFO
+#ifdef CONFIG_SCHEDSTATS
 /*
  * Provides /proc/PID/schedstat
  */
 static int proc_pid_schedstat(struct seq_file *m, struct pid_namespace *ns,
 			      struct pid *pid, struct task_struct *task)
 {
-	if (unlikely(!sched_info_on()))
-		seq_printf(m, "0 0 0\n");
-	else
-		seq_printf(m, "%llu %llu %lu\n",
+	seq_printf(m, "%llu %llu %lu\n",
 		   (unsigned long long)task->se.sum_exec_runtime,
 		   (unsigned long long)task->sched_info.run_delay,
 		   task->sched_info.pcount);
@@ -2795,7 +2787,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_STACKTRACE
 	ONE("stack",      S_IRUSR, proc_pid_stack),
 #endif
-#ifdef CONFIG_SCHED_INFO
+#ifdef CONFIG_SCHEDSTATS
 	ONE("schedstat",  S_IRUGO, proc_pid_schedstat),
 #endif
 #ifdef CONFIG_LATENCYTOP
@@ -3143,7 +3135,7 @@ static const struct pid_entry tid_base_stuff[] = {
 #ifdef CONFIG_STACKTRACE
 	ONE("stack",      S_IRUSR, proc_pid_stack),
 #endif
-#ifdef CONFIG_SCHED_INFO
+#ifdef CONFIG_SCHEDSTATS
 	ONE("schedstat", S_IRUGO, proc_pid_schedstat),
 #endif
 #ifdef CONFIG_LATENCYTOP

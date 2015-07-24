@@ -67,6 +67,8 @@ struct ipvl_dev {
 	struct ipvl_port	*port;
 	struct net_device	*phy_dev;
 	struct list_head	addrs;
+	int			ipv4cnt;
+	int			ipv6cnt;
 	struct ipvl_pcpu_stats	__percpu *pcpu_stats;
 	DECLARE_BITMAP(mac_filters, IPVLAN_MAC_FILTER_SIZE);
 	netdev_features_t	sfeatures;
@@ -104,11 +106,6 @@ static inline struct ipvl_port *ipvlan_port_get_rcu(const struct net_device *d)
 	return rcu_dereference(d->rx_handler_data);
 }
 
-static inline struct ipvl_port *ipvlan_port_get_rcu_bh(const struct net_device *d)
-{
-	return rcu_dereference_bh(d->rx_handler_data);
-}
-
 static inline struct ipvl_port *ipvlan_port_get_rtnl(const struct net_device *d)
 {
 	return rtnl_dereference(d->rx_handler_data);
@@ -127,5 +124,5 @@ struct ipvl_addr *ipvlan_find_addr(const struct ipvl_dev *ipvlan,
 bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6);
 struct ipvl_addr *ipvlan_ht_addr_lookup(const struct ipvl_port *port,
 					const void *iaddr, bool is_v6);
-void ipvlan_ht_addr_del(struct ipvl_addr *addr);
+void ipvlan_ht_addr_del(struct ipvl_addr *addr, bool sync);
 #endif /* __IPVLAN_H */

@@ -47,7 +47,7 @@ rq_sched_info_depart(struct rq *rq, unsigned long long delta)
 # define schedstat_set(var, val)	do { } while (0)
 #endif
 
-#ifdef CONFIG_SCHED_INFO
+#if defined(CONFIG_SCHEDSTATS) || defined(CONFIG_TASK_DELAY_ACCT)
 static inline void sched_info_reset_dequeued(struct task_struct *t)
 {
 	t->sched_info.last_queued = 0;
@@ -156,7 +156,7 @@ sched_info_switch(struct rq *rq,
 #define sched_info_depart(rq, t)		do { } while (0)
 #define sched_info_arrive(rq, next)		do { } while (0)
 #define sched_info_switch(rq, t, next)		do { } while (0)
-#endif /* CONFIG_SCHED_INFO */
+#endif /* CONFIG_SCHEDSTATS || CONFIG_TASK_DELAY_ACCT */
 
 /*
  * The following are functions that support scheduler-internal time accounting.

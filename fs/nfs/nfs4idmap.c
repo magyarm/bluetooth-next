@@ -494,7 +494,12 @@ nfs_idmap_delete(struct nfs_client *clp)
 
 int nfs_idmap_init(void)
 {
-	return nfs_idmap_init_keyring();
+	int ret;
+	ret = nfs_idmap_init_keyring();
+	if (ret != 0)
+		goto out;
+out:
+	return ret;
 }
 
 void nfs_idmap_quit(void)

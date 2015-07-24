@@ -317,7 +317,6 @@ out:
 static int gcm_aes_nx_crypt(struct aead_request *req, int enc)
 {
 	struct nx_crypto_ctx *nx_ctx = crypto_tfm_ctx(req->base.tfm);
-	struct nx_gcm_rctx *rctx = aead_request_ctx(req);
 	struct nx_csbcpb *csbcpb = nx_ctx->csbcpb;
 	struct blkcipher_desc desc;
 	unsigned int nbytes = req->cryptlen;
@@ -327,7 +326,7 @@ static int gcm_aes_nx_crypt(struct aead_request *req, int enc)
 
 	spin_lock_irqsave(&nx_ctx->lock, irq_flags);
 
-	desc.info = rctx->iv;
+	desc.info = nx_ctx->priv.gcm.iv;
 	/* initialize the counter */
 	*(u32 *)(desc.info + NX_GCM_CTR_OFFSET) = 1;
 
@@ -425,8 +424,8 @@ out:
 
 static int gcm_aes_nx_encrypt(struct aead_request *req)
 {
-	struct nx_gcm_rctx *rctx = aead_request_ctx(req);
-	char *iv = rctx->iv;
+	struct nx_crypto_ctx *nx_ctx = crypto_tfm_ctx(req->base.tfm);
+	char *iv = nx_ctx->priv.gcm.iv;
 
 	memcpy(iv, req->iv, 12);
 
@@ -435,8 +434,8 @@ static int gcm_aes_nx_encrypt(struct aead_request *req)
 
 static int gcm_aes_nx_decrypt(struct aead_request *req)
 {
-	struct nx_gcm_rctx *rctx = aead_request_ctx(req);
-	char *iv = rctx->iv;
+	struct nx_crypto_ctx *nx_ctx = crypto_tfm_ctx(req->base.tfm);
+	char *iv = nx_ctx->priv.gcm.iv;
 
 	memcpy(iv, req->iv, 12);
 
@@ -446,8 +445,7 @@ static int gcm_aes_nx_decrypt(struct aead_request *req)
 static int gcm4106_aes_nx_encrypt(struct aead_request *req)
 {
 	struct nx_crypto_ctx *nx_ctx = crypto_tfm_ctx(req->base.tfm);
-	struct nx_gcm_rctx *rctx = aead_request_ctx(req);
-	char *iv = rctx->iv;
+	char *iv = nx_ctx->priv.gcm.iv;
 	char *nonce = nx_ctx->priv.gcm.nonce;
 
 	memcpy(iv, nonce, NX_GCM4106_NONCE_LEN);
@@ -459,8 +457,7 @@ static int gcm4106_aes_nx_encrypt(struct aead_request *req)
 static int gcm4106_aes_nx_decrypt(struct aead_request *req)
 {
 	struct nx_crypto_ctx *nx_ctx = crypto_tfm_ctx(req->base.tfm);
-	struct nx_gcm_rctx *rctx = aead_request_ctx(req);
-	char *iv = rctx->iv;
+	char *iv = nx_ctx->priv.gcm.iv;
 	char *nonce = nx_ctx->priv.gcm.nonce;
 
 	memcpy(iv, nonce, NX_GCM4106_NONCE_LEN);

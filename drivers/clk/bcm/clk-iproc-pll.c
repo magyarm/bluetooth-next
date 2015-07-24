@@ -366,7 +366,7 @@ static unsigned long iproc_pll_recalc_rate(struct clk_hw *hw,
 	val = readl(pll->pll_base + ctrl->ndiv_int.offset);
 	ndiv_int = (val >> ctrl->ndiv_int.shift) &
 		bit_mask(ctrl->ndiv_int.width);
-	ndiv = (u64)ndiv_int << ctrl->ndiv_int.shift;
+	ndiv = ndiv_int << ctrl->ndiv_int.shift;
 
 	if (ctrl->flags & IPROC_CLK_PLL_HAS_NDIV_FRAC) {
 		val = readl(pll->pll_base + ctrl->ndiv_frac.offset);
@@ -374,8 +374,7 @@ static unsigned long iproc_pll_recalc_rate(struct clk_hw *hw,
 			bit_mask(ctrl->ndiv_frac.width);
 
 		if (ndiv_frac != 0)
-			ndiv = ((u64)ndiv_int << ctrl->ndiv_int.shift) |
-				ndiv_frac;
+			ndiv = (ndiv_int << ctrl->ndiv_int.shift) | ndiv_frac;
 	}
 
 	val = readl(pll->pll_base + ctrl->pdiv.offset);
@@ -656,6 +655,10 @@ void __init iproc_pll_clk_setup(struct device_node *node,
 		memset(&init, 0, sizeof(init));
 		parent_name = node->name;
 
+		clk_name = kzalloc(IPROC_CLK_NAME_LEN, GFP_KERNEL);
+		if (WARN_ON(!clk_name))
+			goto err_clk_register;
+
 		ret = of_property_read_string_index(node, "clock-output-names",
 						    i, &clk_name);
 		if (WARN_ON(ret))
@@ -687,8 +690,10 @@ void __init iproc_pll_clk_setup(struct device_node *node,
 	return;
 
 err_clk_register:
-	for (i = 0; i < num_clks; i++)
+	for (i = 0; i < num_clks; i++) {
+		kfree(pll->clks[i].name);
 		clk_unregister(pll->clk_data.clks[i]);
+	}
 
 err_pll_register:
 	if (pll->asiu_base)

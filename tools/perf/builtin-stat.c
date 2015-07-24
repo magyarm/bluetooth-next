@@ -67,7 +67,10 @@
 #define CNTR_NOT_SUPPORTED	"<not supported>"
 #define CNTR_NOT_COUNTED	"<not counted>"
 
-static void print_counters(struct timespec *ts, int argc, const char **argv);
+static void print_stat(int argc, const char **argv);
+static void print_counter_aggr(struct perf_evsel *counter, char *prefix);
+static void print_counter(struct perf_evsel *counter, char *prefix);
+static void print_aggr(char *prefix);
 
 /* Default events used for perf stat -T */
 static const char *transaction_attrs = {
@@ -138,9 +141,96 @@ static inline void diff_timespec(struct timespec *r, struct timespec *a,
 	}
 }
 
-static void perf_stat__reset_stats(void)
+static inline struct cpu_map *perf_evsel__cpus(struct perf_evsel *evsel)
 {
-	perf_evlist__reset_stats(evsel_list);
+	return (evsel->cpus && !target.cpu_list) ? evsel->cpus : evsel_list->cpus;
+}
+
+static inline int perf_evsel__nr_cpus(struct perf_evsel *evsel)
+{
+	return perf_evsel__cpus(evsel)->nr;
+}
+
+static void perf_evsel__reset_stat_priv(struct perf_evsel *evsel)
+{
+	int i;
+	struct perf_stat *ps = evsel->priv;
+
+	for (i = 0; i < 3; i++)
+		init_stats(&ps->res_stats[i]);
+
+	perf_stat_evsel_id_init(evsel);
+}
+
+static int perf_evsel__alloc_stat_priv(struct perf_evsel *evsel)
+{
+	evsel->priv = zalloc(sizeof(struct perf_stat));
+	if (evsel->priv == NULL)
+		return -ENOMEM;
+	perf_evsel__reset_stat_priv(evsel);
+	return 0;
+}
+
+static void perf_evsel__free_stat_priv(struct perf_evsel *evsel)
+{
+	zfree(&evsel->priv);
+}
+
+static int perf_evsel__alloc_prev_raw_counts(struct perf_evsel *evsel)
+{
+	struct perf_counts *counts;
+
+	counts = perf_counts__new(perf_evsel__nr_cpus(evsel));
+	if (counts)
+		evsel->prev_raw_counts = counts;
+
+	return counts ? 0 : -ENOMEM;
+}
+
+static void perf_evsel__free_prev_raw_counts(struct perf_evsel *evsel)
+{
+	perf_counts__delete(evsel->prev_raw_counts);
+	evsel->prev_raw_counts = NULL;
+}
+
+static void perf_evlist__free_stats(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+	evlist__for_each(evlist, evsel) {
+		perf_evsel__free_stat_priv(evsel);
+		perf_evsel__free_counts(evsel);
+		perf_evsel__free_prev_raw_counts(evsel);
+	}
+}
+
+static int perf_evlist__alloc_stats(struct perf_evlist *evlist, bool alloc_raw)
+{
+	struct perf_evsel *evsel;
+
+	evlist__for_each(evlist, evsel) {
+		if (perf_evsel__alloc_stat_priv(evsel) < 0 ||
+		    perf_evsel__alloc_counts(evsel, perf_evsel__nr_cpus(evsel)) < 0 ||
+		    (alloc_raw && perf_evsel__alloc_prev_raw_counts(evsel) < 0))
+			goto out_free;
+	}
+
+	return 0;
+
+out_free:
+	perf_evlist__free_stats(evlist);
+	return -1;
+}
+
+static void perf_stat__reset_stats(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+	evlist__for_each(evlist, evsel) {
+		perf_evsel__reset_stat_priv(evsel);
+		perf_evsel__reset_counts(evsel, perf_evsel__nr_cpus(evsel));
+	}
+
 	perf_stat__reset_shadow_stats();
 }
 
@@ -214,9 +304,8 @@ static int check_per_pkg(struct perf_evsel *counter, int cpu, bool *skip)
 	return 0;
 }
 
-static int
-process_counter_values(struct perf_evsel *evsel, int cpu, int thread,
-		       struct perf_counts_values *count)
+static int read_cb(struct perf_evsel *evsel, int cpu, int thread __maybe_unused,
+		   struct perf_counts_values *count)
 {
 	struct perf_counts_values *aggr = &evsel->counts->aggr;
 	static struct perf_counts_values zero;
@@ -231,13 +320,13 @@ process_counter_values(struct perf_evsel *evsel, int cpu, int thread,
 		count = &zero;
 
 	switch (aggr_mode) {
-	case AGGR_THREAD:
 	case AGGR_CORE:
 	case AGGR_SOCKET:
 	case AGGR_NONE:
 		if (!evsel->snapshot)
-			perf_evsel__compute_deltas(evsel, cpu, thread, count);
+			perf_evsel__compute_deltas(evsel, cpu, count);
 		perf_counts_values__scale(count, scale, NULL);
+		evsel->counts->cpu[cpu] = *count;
 		if (aggr_mode == AGGR_NONE)
 			perf_stat__update_shadow_stats(evsel, count->values, cpu);
 		break;
@@ -254,48 +343,26 @@ process_counter_values(struct perf_evsel *evsel, int cpu, int thread,
 	return 0;
 }
 
-static int process_counter_maps(struct perf_evsel *counter)
-{
-	int nthreads = thread_map__nr(counter->threads);
-	int ncpus = perf_evsel__nr_cpus(counter);
-	int cpu, thread;
+static int read_counter(struct perf_evsel *counter);
 
-	if (counter->system_wide)
-		nthreads = 1;
-
-	for (thread = 0; thread < nthreads; thread++) {
-		for (cpu = 0; cpu < ncpus; cpu++) {
-			if (process_counter_values(counter, cpu, thread,
-						   perf_counts(counter->counts, cpu, thread)))
-				return -1;
-		}
-	}
-
-	return 0;
-}
-
-static int process_counter(struct perf_evsel *counter)
+/*
+ * Read out the results of a single counter:
+ * aggregate counts across CPUs in system-wide mode
+ */
+static int read_counter_aggr(struct perf_evsel *counter)
 {
 	struct perf_counts_values *aggr = &counter->counts->aggr;
 	struct perf_stat *ps = counter->priv;
 	u64 *count = counter->counts->aggr.values;
-	int i, ret;
+	int i;
 
 	aggr->val = aggr->ena = aggr->run = 0;
-	init_stats(ps->res_stats);
 
-	if (counter->per_pkg)
-		zero_per_pkg(counter);
-
-	ret = process_counter_maps(counter);
-	if (ret)
-		return ret;
-
-	if (aggr_mode != AGGR_GLOBAL)
-		return 0;
+	if (read_counter(counter))
+		return -1;
 
 	if (!counter->snapshot)
-		perf_evsel__compute_deltas(counter, -1, -1, aggr);
+		perf_evsel__compute_deltas(counter, -1, aggr);
 	perf_counts_values__scale(aggr, scale, &counter->counts->scaled);
 
 	for (i = 0; i < 3; i++)
@@ -330,12 +397,12 @@ static int read_counter(struct perf_evsel *counter)
 	if (counter->system_wide)
 		nthreads = 1;
 
+	if (counter->per_pkg)
+		zero_per_pkg(counter);
+
 	for (thread = 0; thread < nthreads; thread++) {
 		for (cpu = 0; cpu < ncpus; cpu++) {
-			struct perf_counts_values *count;
-
-			count = perf_counts(counter->counts, cpu, thread);
-			if (perf_evsel__read(counter, cpu, thread, count))
+			if (perf_evsel__read_cb(counter, cpu, thread, read_cb))
 				return -1;
 		}
 	}
@@ -343,34 +410,68 @@ static int read_counter(struct perf_evsel *counter)
 	return 0;
 }
 
-static void read_counters(bool close_counters)
+static void print_interval(void)
 {
+	static int num_print_interval;
 	struct perf_evsel *counter;
+	struct perf_stat *ps;
+	struct timespec ts, rs;
+	char prefix[64];
 
-	evlist__for_each(evsel_list, counter) {
-		if (read_counter(counter))
-			pr_warning("failed to read counter %s\n", counter->name);
-
-		if (process_counter(counter))
-			pr_warning("failed to process counter %s\n", counter->name);
-
-		if (close_counters) {
-			perf_evsel__close_fd(counter, perf_evsel__nr_cpus(counter),
-					     thread_map__nr(evsel_list->threads));
+	if (aggr_mode == AGGR_GLOBAL) {
+		evlist__for_each(evsel_list, counter) {
+			ps = counter->priv;
+			memset(ps->res_stats, 0, sizeof(ps->res_stats));
+			read_counter_aggr(counter);
+		}
+	} else	{
+		evlist__for_each(evsel_list, counter) {
+			ps = counter->priv;
+			memset(ps->res_stats, 0, sizeof(ps->res_stats));
+			read_counter(counter);
 		}
 	}
-}
-
-static void process_interval(void)
-{
-	struct timespec ts, rs;
-
-	read_counters(false);
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	diff_timespec(&rs, &ts, &ref_time);
+	sprintf(prefix, "%6lu.%09lu%s", rs.tv_sec, rs.tv_nsec, csv_sep);
 
-	print_counters(&rs, 0, NULL);
+	if (num_print_interval == 0 && !csv_output) {
+		switch (aggr_mode) {
+		case AGGR_SOCKET:
+			fprintf(output, "#           time socket cpus             counts %*s events\n", unit_width, "unit");
+			break;
+		case AGGR_CORE:
+			fprintf(output, "#           time core         cpus             counts %*s events\n", unit_width, "unit");
+			break;
+		case AGGR_NONE:
+			fprintf(output, "#           time CPU                counts %*s events\n", unit_width, "unit");
+			break;
+		case AGGR_GLOBAL:
+		default:
+			fprintf(output, "#           time             counts %*s events\n", unit_width, "unit");
+		}
+	}
+
+	if (++num_print_interval == 25)
+		num_print_interval = 0;
+
+	switch (aggr_mode) {
+	case AGGR_CORE:
+	case AGGR_SOCKET:
+		print_aggr(prefix);
+		break;
+	case AGGR_NONE:
+		evlist__for_each(evsel_list, counter)
+			print_counter(counter, prefix);
+		break;
+	case AGGR_GLOBAL:
+	default:
+		evlist__for_each(evsel_list, counter)
+			print_counter_aggr(counter, prefix);
+	}
+
+	fflush(output);
 }
 
 static void handle_initial_delay(void)
@@ -485,7 +586,7 @@ static int __run_perf_stat(int argc, const char **argv)
 		if (interval) {
 			while (!waitpid(child_pid, &status, WNOHANG)) {
 				nanosleep(&ts, NULL);
-				process_interval();
+				print_interval();
 			}
 		}
 		wait(&status);
@@ -503,7 +604,7 @@ static int __run_perf_stat(int argc, const char **argv)
 		while (!done) {
 			nanosleep(&ts, NULL);
 			if (interval)
-				process_interval();
+				print_interval();
 		}
 	}
 
@@ -511,7 +612,18 @@ static int __run_perf_stat(int argc, const char **argv)
 
 	update_stats(&walltime_nsecs_stats, t1 - t0);
 
-	read_counters(true);
+	if (aggr_mode == AGGR_GLOBAL) {
+		evlist__for_each(evsel_list, counter) {
+			read_counter_aggr(counter);
+			perf_evsel__close_fd(counter, perf_evsel__nr_cpus(counter),
+					     thread_map__nr(evsel_list->threads));
+		}
+	} else {
+		evlist__for_each(evsel_list, counter) {
+			read_counter(counter);
+			perf_evsel__close_fd(counter, perf_evsel__nr_cpus(counter), 1);
+		}
+	}
 
 	return WEXITSTATUS(status);
 }
@@ -602,14 +714,6 @@ static void aggr_printout(struct perf_evsel *evsel, int id, int nr)
 		fprintf(output, "CPU%*d%s",
 			csv_output ? 0 : -4,
 			perf_evsel__cpus(evsel)->map[id], csv_sep);
-		break;
-	case AGGR_THREAD:
-		fprintf(output, "%*s-%*d%s",
-			csv_output ? 0 : 16,
-			thread_map__comm(evsel->threads, id),
-			csv_output ? 0 : -8,
-			thread_map__pid(evsel->threads, id),
-			csv_sep);
 		break;
 	case AGGR_GLOBAL:
 	default:
@@ -711,9 +815,9 @@ static void print_aggr(char *prefix)
 				s2 = aggr_get_id(evsel_list->cpus, cpu2);
 				if (s2 != id)
 					continue;
-				val += perf_counts(counter->counts, cpu, 0)->val;
-				ena += perf_counts(counter->counts, cpu, 0)->ena;
-				run += perf_counts(counter->counts, cpu, 0)->run;
+				val += counter->counts->cpu[cpu].val;
+				ena += counter->counts->cpu[cpu].ena;
+				run += counter->counts->cpu[cpu].run;
 				nr++;
 			}
 			if (prefix)
@@ -756,40 +860,6 @@ static void print_aggr(char *prefix)
 			print_running(run, ena);
 			fputc('\n', output);
 		}
-	}
-}
-
-static void print_aggr_thread(struct perf_evsel *counter, char *prefix)
-{
-	int nthreads = thread_map__nr(counter->threads);
-	int ncpus = cpu_map__nr(counter->cpus);
-	int cpu, thread;
-	double uval;
-
-	for (thread = 0; thread < nthreads; thread++) {
-		u64 ena = 0, run = 0, val = 0;
-
-		for (cpu = 0; cpu < ncpus; cpu++) {
-			val += perf_counts(counter->counts, cpu, thread)->val;
-			ena += perf_counts(counter->counts, cpu, thread)->ena;
-			run += perf_counts(counter->counts, cpu, thread)->run;
-		}
-
-		if (prefix)
-			fprintf(output, "%s", prefix);
-
-		uval = val * counter->scale;
-
-		if (nsec_counter(counter))
-			nsec_printout(thread, 0, counter, uval);
-		else
-			abs_printout(thread, 0, counter, uval);
-
-		if (!csv_output)
-			print_noise(counter, 1.0);
-
-		print_running(run, ena);
-		fputc('\n', output);
 	}
 }
 
@@ -855,9 +925,9 @@ static void print_counter(struct perf_evsel *counter, char *prefix)
 	int cpu;
 
 	for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
-		val = perf_counts(counter->counts, cpu, 0)->val;
-		ena = perf_counts(counter->counts, cpu, 0)->ena;
-		run = perf_counts(counter->counts, cpu, 0)->run;
+		val = counter->counts->cpu[cpu].val;
+		ena = counter->counts->cpu[cpu].ena;
+		run = counter->counts->cpu[cpu].run;
 
 		if (prefix)
 			fprintf(output, "%s", prefix);
@@ -902,38 +972,9 @@ static void print_counter(struct perf_evsel *counter, char *prefix)
 	}
 }
 
-static void print_interval(char *prefix, struct timespec *ts)
+static void print_stat(int argc, const char **argv)
 {
-	static int num_print_interval;
-
-	sprintf(prefix, "%6lu.%09lu%s", ts->tv_sec, ts->tv_nsec, csv_sep);
-
-	if (num_print_interval == 0 && !csv_output) {
-		switch (aggr_mode) {
-		case AGGR_SOCKET:
-			fprintf(output, "#           time socket cpus             counts %*s events\n", unit_width, "unit");
-			break;
-		case AGGR_CORE:
-			fprintf(output, "#           time core         cpus             counts %*s events\n", unit_width, "unit");
-			break;
-		case AGGR_NONE:
-			fprintf(output, "#           time CPU                counts %*s events\n", unit_width, "unit");
-			break;
-		case AGGR_THREAD:
-			fprintf(output, "#           time             comm-pid                  counts %*s events\n", unit_width, "unit");
-			break;
-		case AGGR_GLOBAL:
-		default:
-			fprintf(output, "#           time             counts %*s events\n", unit_width, "unit");
-		}
-	}
-
-	if (++num_print_interval == 25)
-		num_print_interval = 0;
-}
-
-static void print_header(int argc, const char **argv)
-{
+	struct perf_evsel *counter;
 	int i;
 
 	fflush(stdout);
@@ -959,57 +1000,36 @@ static void print_header(int argc, const char **argv)
 			fprintf(output, " (%d runs)", run_count);
 		fprintf(output, ":\n\n");
 	}
-}
-
-static void print_footer(void)
-{
-	if (!null_run)
-		fprintf(output, "\n");
-	fprintf(output, " %17.9f seconds time elapsed",
-			avg_stats(&walltime_nsecs_stats)/1e9);
-	if (run_count > 1) {
-		fprintf(output, "                                        ");
-		print_noise_pct(stddev_stats(&walltime_nsecs_stats),
-				avg_stats(&walltime_nsecs_stats));
-	}
-	fprintf(output, "\n\n");
-}
-
-static void print_counters(struct timespec *ts, int argc, const char **argv)
-{
-	struct perf_evsel *counter;
-	char buf[64], *prefix = NULL;
-
-	if (interval)
-		print_interval(prefix = buf, ts);
-	else
-		print_header(argc, argv);
 
 	switch (aggr_mode) {
 	case AGGR_CORE:
 	case AGGR_SOCKET:
-		print_aggr(prefix);
-		break;
-	case AGGR_THREAD:
-		evlist__for_each(evsel_list, counter)
-			print_aggr_thread(counter, prefix);
+		print_aggr(NULL);
 		break;
 	case AGGR_GLOBAL:
 		evlist__for_each(evsel_list, counter)
-			print_counter_aggr(counter, prefix);
+			print_counter_aggr(counter, NULL);
 		break;
 	case AGGR_NONE:
 		evlist__for_each(evsel_list, counter)
-			print_counter(counter, prefix);
+			print_counter(counter, NULL);
 		break;
 	default:
 		break;
 	}
 
-	if (!interval && !csv_output)
-		print_footer();
-
-	fflush(output);
+	if (!csv_output) {
+		if (!null_run)
+			fprintf(output, "\n");
+		fprintf(output, " %17.9f seconds time elapsed",
+				avg_stats(&walltime_nsecs_stats)/1e9);
+		if (run_count > 1) {
+			fprintf(output, "                                        ");
+			print_noise_pct(stddev_stats(&walltime_nsecs_stats),
+					avg_stats(&walltime_nsecs_stats));
+		}
+		fprintf(output, "\n\n");
+	}
 }
 
 static volatile int signr = -1;
@@ -1081,7 +1101,6 @@ static int perf_stat_init_aggr_mode(void)
 		break;
 	case AGGR_NONE:
 	case AGGR_GLOBAL:
-	case AGGR_THREAD:
 	default:
 		break;
 	}
@@ -1306,8 +1325,6 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "aggregate counts per processor socket", AGGR_SOCKET),
 	OPT_SET_UINT(0, "per-core", &aggr_mode,
 		     "aggregate counts per physical processor core", AGGR_CORE),
-	OPT_SET_UINT(0, "per-thread", &aggr_mode,
-		     "aggregate counts per thread", AGGR_THREAD),
 	OPT_UINTEGER('D', "delay", &initial_delay,
 		     "ms to wait before starting measurement after program start"),
 	OPT_END()
@@ -1399,19 +1416,8 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		run_count = 1;
 	}
 
-	if ((aggr_mode == AGGR_THREAD) && !target__has_task(&target)) {
-		fprintf(stderr, "The --per-thread option is only available "
-			"when monitoring via -p -t options.\n");
-		parse_options_usage(NULL, options, "p", 1);
-		parse_options_usage(NULL, options, "t", 1);
-		goto out;
-	}
-
-	/*
-	 * no_aggr, cgroup are for system-wide only
-	 * --per-thread is aggregated per thread, we dont mix it with cpu mode
-	 */
-	if (((aggr_mode != AGGR_GLOBAL && aggr_mode != AGGR_THREAD) || nr_cgroups) &&
+	/* no_aggr, cgroup are for system-wide only */
+	if ((aggr_mode != AGGR_GLOBAL || nr_cgroups) &&
 	    !target__has_cpu(&target)) {
 		fprintf(stderr, "both cgroup and no-aggregation "
 			"modes only available in system-wide mode\n");
@@ -1439,14 +1445,6 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		}
 		goto out;
 	}
-
-	/*
-	 * Initialize thread_map with comm names,
-	 * so we could print it out on output.
-	 */
-	if (aggr_mode == AGGR_THREAD)
-		thread_map__read_comms(evsel_list->threads);
-
 	if (interval && interval < 100) {
 		pr_err("print interval must be >= 100ms\n");
 		parse_options_usage(stat_usage, options, "I", 1);
@@ -1480,13 +1478,13 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 
 		status = run_perf_stat(argc, argv);
 		if (forever && status != -1) {
-			print_counters(NULL, argc, argv);
-			perf_stat__reset_stats();
+			print_stat(argc, argv);
+			perf_stat__reset_stats(evsel_list);
 		}
 	}
 
 	if (!forever && status != -1 && !interval)
-		print_counters(NULL, argc, argv);
+		print_stat(argc, argv);
 
 	perf_evlist__free_stats(evsel_list);
 out:
