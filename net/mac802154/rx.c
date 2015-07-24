@@ -44,7 +44,7 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, struct iee802154_hdr *hdr
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	u8 bsn;
+    struct ieee802154_beacon_indication ind;
 
 	/* Lets start parsing beacon packet here.
 	 * Data packets are processed by netif_receive_skb().
@@ -102,13 +102,12 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, struct iee802154_hdr *hdr
 	//The Source PAN Identifier and Source Address fields shall contain the PAN identifier and address,
 	//respectively, of the device transmitting the beacon.
 
-	link_quality = mac_cb(skb)->lqi;
-
+    ind.bsn = hdr->seq;
 
 	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
 	 * where it can be accessed via netlink
 	 */
-	cfg802154_inform_beacon();
+	cfg802154_inform_beacon(&ind);
 }
 
 static int
