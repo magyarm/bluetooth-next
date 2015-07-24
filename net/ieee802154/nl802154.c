@@ -472,7 +472,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
-	CMD(get_ed_scan, ED_SCAN_REQ);
+	CMD(ed_scan_req, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1068,12 +1068,12 @@ static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, 
         goto out;
     }
     for( i = 0, j = 0; i <= IEEE802154_MAX_CHANNEL && j <= result_list_size; i++ ) {
-        if ( scan_channels & (1 << i) ) {
-            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ i ] );
+        if ( scan_channels & BIT( i ) ) {
+            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ j ] );
             if ( 0 != r ) {
                 goto nla_put_failure;
             }
-            printk( KERN_INFO "channel %u has value %u\n", i, ed[ i ] );
+            printk( KERN_INFO "channel %u has value %u\n", i, ed[ j ] );
             j++;
         }
     }
@@ -1124,23 +1124,16 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
     channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
 
-    printk( KERN_INFO "channel_page is %u\n", channel_page );
-
     if ( channel_page > IEEE802154_MAX_PAGE ) {
-        printk( KERN_INFO "invalid channel_page %u\n", channel_page );
         r = -EINVAL;
         goto out;
     }
-
-    printk( KERN_INFO "scan_channels is %08x\n", scan_channels );
 
     if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
         printk( KERN_INFO "invalid scan_channels %u\n", scan_channels );
         r = -EINVAL;
         goto out;
     }
-
-    printk( KERN_INFO "scan_channels is %08x\n", scan_channels );
 
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
@@ -1159,16 +1152,15 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     unscanned_channels = 0;
     detected_category = 2; // ed_scan
 
-    r = rdev_get_ed_scan(rdev, NULL, ed, channel_page, scan_duration );
-    if ( r < 0 ) {
-        goto free_reply;
-    }
-
     for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
         result_list_size += !!( scan_channels & (1 << i) );
     }
 
-    printk( KERN_INFO "result_list_size is %u\n", result_list_size );
+    printk( "ed is at %p\n", ed  );
+    r = rdev_ed_scan_req(rdev, NULL, channel_page, scan_channels, ed, result_list_size, scan_duration );
+    if ( r < 0 ) {
+        goto free_reply;
+    }
 
     r =
         nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, status ) ||
