@@ -33,7 +33,7 @@ static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 static void nl802154_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			       struct genl_info *info);
 
-static int netlink_sendid;
+static struct genl_info ginfo;
 
 /* the netlink family */
 static struct genl_family nl802154_fam = {
@@ -1188,29 +1188,38 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 {
 	int ret = 0;
 	struct sk_buff *notification;
+	void *hdr;
+
+	printk( KERN_INFO "In nl803154_beacon_notify_indication");
 
 	notification = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-	if ( NULL == reply ) {
-		r = -ENOMEM;
+	if ( NULL == notification ) {
+		ret = -ENOMEM;
 		goto out;
 	}
 
-	hdr = nl802154hdr_put( notification, netlink_sendid, NL_AUTO_SEQ, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	hdr = nl802154hdr_put( notification, ginfo.snd_portid, ginfo.snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
 	if ( NULL == hdr ) {
-		r = -ENOBUFS;
+		ret = -ENOBUFS;
 		goto free_reply;
 	}
 
-	r = nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn );
+	ret = nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn );
 
-	if ( 0 != r ) {
+	if ( 0 != ret ) {
 		goto nla_put_failure;
 	}
 
 	genlmsg_end( notification, hdr );
 
-	rc = genlmsg_unicast(notification, netlink_sendid);
+	ret = genlmsg_reply(notification, &ginfo);
 
+nla_put_failure:
+free_reply:
+	nlmsg_free( notification );
+
+out:
+	return ret;
 }
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
@@ -1291,6 +1300,8 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 
 	struct cfg802154_registered_device *rdev;
 
+	printk( KERN_INFO "In nl802154_set_beacon_indication");
+
     rdev = info->user_ptr[0];
 
     printk(KERN_INFO "Inside %s\n", __FUNCTION__);
@@ -1302,10 +1313,11 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
    	 goto out;
     }
 
-    netlink_sendid = nla_get_u32( info->attrs[ NL802154_BEACON_NOTIFY_PORTID ] );
+    ginfo = *info;
 
     // Check to see if we need to set any radio parameters. ( receive mode or what ever ).
 
+out:
     return r;
 }
 

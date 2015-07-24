@@ -282,4 +282,6 @@ struct ieee802154_beacon_indication {
 	u8 sdu_len;
 };
 
+int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify );
+
 #endif /* __NL802154_H */

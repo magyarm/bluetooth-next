@@ -230,4 +230,6 @@ static inline const char *wpan_phy_name(struct wpan_phy *phy)
 	return dev_name(&phy->dev);
 }
 
+int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify );
+
 #endif /* __NET_CFG802154_H */

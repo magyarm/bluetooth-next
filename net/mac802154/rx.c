@@ -34,13 +34,14 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	pr_debug("received beacon packet via interface %s\n", sdata->dev->name);
+	pr_debug("received beacon packet via interface %s\n", skb->dev->name);
 
 	return netif_receive_skb(skb);
 }
 
-static int ieee802154_deliver_bcn(struct sk_buff *skb, struct iee802154_hdr *hdr)
+static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr)
 {
+	int ret = 0;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
@@ -107,7 +108,9 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, struct iee802154_hdr *hdr
 	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
 	 * where it can be accessed via netlink
 	 */
-	cfg802154_inform_beacon(&ind);
+	ret = cfg802154_inform_beacon(&ind);
+
+	return ret;
 }
 
 static int
