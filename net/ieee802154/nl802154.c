@@ -245,6 +245,13 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
     [NL802154_ATTR_SEC_KEY_SOURCE] = { .type = NLA_NESTED, },
     [NL802154_ATTR_SEC_KEY_SOURCE_ENTRY] = { .type = NLA_U8, },
     [NL802154_ATTR_SEC_KEY_INDEX] = { .type = NLA_U8, },
+
+	[NL802154_ATTR_BEACON_SEQUENCE_NUMBER] = { .type = NLA_U8, },
+	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
+	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
+	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
+	[NL802154_SDU_LENGTH] = { .type = NLA_U32 },
+	[NL802154_SDU] = { .type = NLA_NESTED },
 };
 
 /* message building helper */
@@ -1171,6 +1178,42 @@ free_reply:
 out:
     kfree( wrk );
     return;
+}
+
+int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify )
+{
+	int ret = 0;
+	struct sk_buff *notification;
+
+	notification = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == reply ) {
+		r = -ENOMEM;
+		goto out;
+	}
+
+	hdr = nl802154hdr_put( notification, NL_AUTO_PORT, NL_AUTO_SEQ, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	if ( NULL == hdr ) {
+		r = -ENOBUFS;
+		goto free_reply;
+	}
+
+	r =
+			nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn )// ||
+			//nla_nest_start( notification, NL802154_ATTR_PAN_DESCRIPTOR, beacon_notify.pan_descriptor ) || // Todo: create function to copy variable size struct using netlink nested attribute. look at nl802154_ed_scan_put_ed
+//			nla_put_u8( notification, NL802154_ATTR_PEND_ADDR_SPEC, beacon_notify.pend_attr_spec ) ||
+//			nla_nest_start( notification, NL802154_ATTR_ADDR_LIST, beacon_notify.addr_list ) ||
+//			nla_put_u32( notification, NL802154_SDU_LENGTH, beacon_notify.sdu_length ) //||
+//			nla_put_array( notification, NL802154_SDU, beacon_notify.sdu ) Todo: Create function to copy variable lenght sdu to an attribute. look at parse_nla_array_u8
+			;
+
+	if ( 0 != r ) {
+		goto nla_put_failure;
+	}
+
+	genlmsg_end( notification, hdr );
+
+	rc = genlmsg_unicast(notification, NL_AUTO_PORT);
+
 }
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
