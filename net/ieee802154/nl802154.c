@@ -1196,8 +1196,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     u8 channel_page;
 
 	struct cfg802154_registered_device *rdev;
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	struct work802154 *wrk;
 
