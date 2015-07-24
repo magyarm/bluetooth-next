@@ -293,12 +293,13 @@ ieee802154_add_work( struct work802154 *wrk ) {
 	struct wpan_phy *phy;
 	struct ieee802154_local *local;
 
-	phy = wrk->phy;
+	phy = ieee802154_wpan_phy_from_work( wrk );
+
 	local = wpan_phy_priv( phy );
 
 	ret = queue_work( local->workqueue, &(wrk->work) );
 
-	return ret ? 0 : 1;
+	return ret ? 0 : -1;
 }
 
 const struct cfg802154_ops mac802154_config_ops = {

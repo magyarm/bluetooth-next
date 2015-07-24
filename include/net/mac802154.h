@@ -23,6 +23,9 @@
 
 #include <net/cfg802154.h>
 
+// XXX: Once the work802154 structure is removed from this header remove the following include
+#include <net/genetlink.h>
+
 /* General MAC frame format:
  *  2 bytes: Frame Control
  *  1 byte:  Sequence Number
@@ -361,8 +364,7 @@ void ieee802154_xmit_complete(struct ieee802154_hw *hw, struct sk_buff *skb,
 // <dummy> XXX: this is dummy code, please remove later
 struct work802154 {
     struct sk_buff *skb;
-    struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
-    struct wpan_phy *phy;
+    struct genl_info info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
     int cmd; // selects which item in the union below to use
     union {
         // put any additional command-specific structs in here

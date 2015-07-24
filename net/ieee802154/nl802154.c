@@ -1114,7 +1114,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
 
     wrk = container_of( work, struct work802154, work );
     skb = wrk->skb;
-    info = wrk->info;
+    info = &(wrk->info);
     rdev = info->user_ptr[0];
     wpan_dev = info->user_ptr[1];
 
@@ -1177,9 +1177,18 @@ out:
     return;
 }
 
+struct wpan_phy* ieee802154_wpan_phy_from_work( struct work802154 *wrk )
+{
+	struct genl_info *info;
+	struct cfg802154_registered_device *rdev;
+	info = &(wrk->info);
+	rdev = info->user_ptr[0];
+	return &(rdev->wpan_phy);
+}
+
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
-    int r = 0;
+    int r;
 
     u8 scan_type;
     __le32 scan_channels;
@@ -1229,12 +1238,9 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
         goto out;
     }
 
-    wrk->info = kzalloc( info->nlhdr->nlmsg_len, GFP_KERNEL );
-    memcpy( wrk->info, info, info->nlhdr->nlmsg_len );
-
     wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
     wrk->skb = skb;
-    wrk->phy = &(rdev->wpan_phy);
+    wrk->info = *info;
     wrk->cmd_stuff.ed_scan.channel_page = channel_page;
     wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;

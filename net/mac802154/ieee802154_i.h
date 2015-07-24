@@ -180,4 +180,7 @@ ieee802154_if_add(struct ieee802154_local *local, const char *name,
 void ieee802154_remove_interfaces(struct ieee802154_local *local);
 void ieee802154_stop_device(struct ieee802154_local *local);
 
+/* misc utility */
+struct wpan_phy* ieee802154_wpan_phy_from_work( struct work802154 *wrk );
+
 #endif /* __IEEE802154_I_H */
