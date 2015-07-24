@@ -33,6 +33,8 @@ static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 static void nl802154_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			       struct genl_info *info);
 
+static int netlink_sendid;
+
 /* the netlink family */
 static struct genl_family nl802154_fam = {
 	.id = GENL_ID_GENERATE,		/* don't bother with a hardcoded ID */
@@ -252,6 +254,8 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
 	[NL802154_SDU_LENGTH] = { .type = NLA_U32 },
 	[NL802154_SDU] = { .type = NLA_NESTED },
+
+	[NL802154_BEACON_NOTIFY_PORTID] = { .type = NLA_U32 },
 };
 
 /* message building helper */
@@ -1191,20 +1195,13 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 		goto out;
 	}
 
-	hdr = nl802154hdr_put( notification, NL_AUTO_PORT, NL_AUTO_SEQ, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	hdr = nl802154hdr_put( notification, netlink_sendid, NL_AUTO_SEQ, 0, NL802154_CMD_BEACON_NOTIFY_IND );
 	if ( NULL == hdr ) {
 		r = -ENOBUFS;
 		goto free_reply;
 	}
 
-	r =
-			nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn )// ||
-			//nla_nest_start( notification, NL802154_ATTR_PAN_DESCRIPTOR, beacon_notify.pan_descriptor ) || // Todo: create function to copy variable size struct using netlink nested attribute. look at nl802154_ed_scan_put_ed
-//			nla_put_u8( notification, NL802154_ATTR_PEND_ADDR_SPEC, beacon_notify.pend_attr_spec ) ||
-//			nla_nest_start( notification, NL802154_ATTR_ADDR_LIST, beacon_notify.addr_list ) ||
-//			nla_put_u32( notification, NL802154_SDU_LENGTH, beacon_notify.sdu_length ) //||
-//			nla_put_array( notification, NL802154_SDU, beacon_notify.sdu ) Todo: Create function to copy variable lenght sdu to an attribute. look at parse_nla_array_u8
-			;
+	r = nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn );
 
 	if ( 0 != r ) {
 		goto nla_put_failure;
@@ -1212,7 +1209,7 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 
 	genlmsg_end( notification, hdr );
 
-	rc = genlmsg_unicast(notification, NL_AUTO_PORT);
+	rc = genlmsg_unicast(notification, netlink_sendid);
 
 }
 
@@ -1288,142 +1285,29 @@ out:
     return r;
 }
 
-static void nl802154_beacon_indication( struct work_struct *work )
+static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
 {
-
-    //int r;
-
-    u8 bsn = 5;
-
-    //struct genl_info *info;
-    //struct sk_buff *reply;
-    //void *hdr;
-    //struct sk_buff *skb;
-    struct work802154 *wrk;
-    //struct genl_info *info;
-
-    //printk(KERN_INFO "Inside %s %d", __FUNCTION__, bsn );
-
-    wrk  = container_of( work, struct work802154, work );
-    //skb  = wrk->skb;
-    //info = wrk->info;
-
-    printk( KERN_INFO "Inside scheduled word fn %s %d\n", __FUNCTION__, bsn );
-
-    schedule_work( &wrk->work );
-
-#if 0
-    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-    if ( NULL == reply ) {
-        r = -ENOMEM;
-        goto out;
-    }
-
-    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_SET_BEACON_INDICATION_ON );
-    if ( NULL == hdr ) {
-        r = -ENOBUFS;
-        goto free_reply;
-    }
-
-    // dummy bsn value for now
-    bsn = 5;
-    r = nla_put_u8( reply, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, bsn );
-    if ( 0 != r ) {
-        goto nla_put_failure;
-    }
-
-    genlmsg_end( reply, hdr );
-
-    r = genlmsg_reply( reply, info );
-    goto out;
-
-nla_put_failure:
-free_reply:
-    nlmsg_free( reply );
-out:
-    kfree( wrk );
-#endif
-    return;
-}
-
-static int nl802154_set_beacon_indication_on( struct sk_buff *skb, struct genl_info *info )
-{
-    int r;
+	int r = 0;
 
 	struct cfg802154_registered_device *rdev;
-	struct work802154 *wrk;
 
     rdev = info->user_ptr[0];
 
     printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 
-    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-    if ( NULL == wrk ) {
-        r = -ENOMEM;
-        goto out;
+    if ( ! (
+   		 info->attrs[ NL802154_BEACON_NOTIFY_PORTID ]
+    ) ) {
+   	 r = -EINVAL;
+   	 goto out;
     }
 
-    wrk->cmd  = NL802154_CMD_SET_BEACON_INDICATION_ON;
-    wrk->skb  = skb;
-    wrk->info = info;
-    INIT_WORK( &wrk->work, nl802154_beacon_indication );
+    netlink_sendid = nla_get_u32( info->attrs[ NL802154_BEACON_NOTIFY_PORTID ] );
 
-    schedule_work( &wrk->work );
+    // Check to see if we need to set any radio parameters. ( receive mode or what ever ).
 
-    //r = ieee802154_add_work( wrk );
-    //if ( 0 != r ) {
-    //    goto free_wrk;
-    //}
-
-    r = 0;
-    goto out;
-
-//free_wrk:
-//    kfree( wrk );
-
-out:
     return r;
 }
-
-#if 0
-static int nl802154_set_beacon_indication_off( struct sk_buff *skb, struct genl_info *info )
-{
-    int r;
-
-	struct cfg802154_registered_device *rdev;
-	struct work802154 *wrk;
-
-    rdev = info->user_ptr[0];
-
-    printk(KERN_INFO "Inside %s", __FUNCTION__);
-
-    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-    if ( NULL == wrk ) {
-        r = -ENOMEM;
-        goto out;
-    }
-    wrk->cmd  = NL802154_CMD_SET_BEACON_INDICATION_ON;
-    wrk->skb  = skb;
-    wrk->info = info;
-    INIT_WORK( &wrk->work, nl802154_beacon_indication );
-
-    schedule_work( &wrk->work );
-
-    r = ieee802154_add_work( wrk );
-    if ( 0 != r ) {
-        goto free_wrk;
-    }
-
-    r = 0;
-    goto out;
-
-free_wrk:
-    kfree( wrk );
-
-out:
-    return r;
-}
-#endif
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
@@ -1640,8 +1524,8 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_SET_BEACON_INDICATION_ON,
-		.doit = nl802154_set_beacon_indication_on,
+		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
+		.doit = nl802154_set_beacon_indication,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |

@@ -56,7 +56,7 @@ enum nl802154_commands {
    NL802154_CMD_ED_SCAN_CNF,
 
    NL802154_CMD_BEACON_NOTIFY_IND, /* 21 */
-	NL802154_CMD_GET_BEACON_NOTIFY,
+	NL802154_CMD_SET_BEACON_NOTIFY,
 
 	/* add new commands above here */
 
@@ -132,6 +132,8 @@ enum nl802154_attrs {
 	 NL802154_ATTR_ADDR_LIST,
 	 NL802154_SDU_LENGTH,
 	 NL802154_SDU,
+
+	 NL802154_BEACON_NOTIFY_PORTID,
 
 	/* add attributes here, update the policy in nl802154.c */
 
