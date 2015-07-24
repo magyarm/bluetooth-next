@@ -286,10 +286,10 @@ ieee802154_get_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
-int cfg802154_inform_beacon( struct beacon_notify )
+int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify )
 {
 	int ret;
-	nl802154_beacon_notify_indication( beacon_notify );
+	ret = nl802154_beacon_notify_indication( beacon_notify );
 	return ret;
 }
 

@@ -1180,7 +1180,7 @@ out:
     return;
 }
 
-int nl802154_beacon_notify_indication( struct beacon_notify )
+int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify )
 {
 	int ret = 0;
 	struct sk_buff *notification;
@@ -1198,11 +1198,11 @@ int nl802154_beacon_notify_indication( struct beacon_notify )
 	}
 
 	r =
-			nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify.bsn ) ||
+			nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn )// ||
 			//nla_nest_start( notification, NL802154_ATTR_PAN_DESCRIPTOR, beacon_notify.pan_descriptor ) || // Todo: create function to copy variable size struct using netlink nested attribute. look at nl802154_ed_scan_put_ed
-			nla_put_u8( notification, NL802154_ATTR_PEND_ADDR_SPEC, beacon_notify.pend_attr_spec ) ||
-			nla_nest_start( notification, NL802154_ATTR_ADDR_LIST, beacon_notify.addr_list ) ||
-			nla_put_u32( notification, NL802154_SDU_LENGTH, beacon_notify.sdu_length ) //||
+//			nla_put_u8( notification, NL802154_ATTR_PEND_ADDR_SPEC, beacon_notify.pend_attr_spec ) ||
+//			nla_nest_start( notification, NL802154_ATTR_ADDR_LIST, beacon_notify.addr_list ) ||
+//			nla_put_u32( notification, NL802154_SDU_LENGTH, beacon_notify.sdu_length ) //||
 //			nla_put_array( notification, NL802154_SDU, beacon_notify.sdu ) Todo: Create function to copy variable lenght sdu to an attribute. look at parse_nla_array_u8
 			;
 
@@ -1212,7 +1212,7 @@ int nl802154_beacon_notify_indication( struct beacon_notify )
 
 	genlmsg_end( notification, hdr );
 
-	 rc = genlmsg_unicast(notification, NL_AUTO_PORT);
+	rc = genlmsg_unicast(notification, NL_AUTO_PORT);
 
 }
 
