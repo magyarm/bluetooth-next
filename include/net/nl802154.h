@@ -274,4 +274,12 @@ enum nl802154_supported_bool_states {
 	NL802154_SUPPORTED_BOOL_MAX = __NL802154_SUPPORTED_BOOL_AFTER_LAST - 1
 };
 
+struct ieee802154_beacon_indication {
+	u8 bsn;
+	struct pan_descriptor {
+		u8 lqi;
+	} pan_desc;
+	u8 sdu_len;
+};
+
 #endif /* __NL802154_H */
