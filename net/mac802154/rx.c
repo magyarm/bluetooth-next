@@ -34,7 +34,81 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
+	pr_debug("received beacon packet via interface %s\n", sdata->dev->name);
+
 	return netif_receive_skb(skb);
+}
+
+static int ieee802154_deliver_bcn(struct sk_buff *skb, struct iee802154_hdr *hdr)
+{
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	u8 bsn;
+
+	/* Lets start parsing beacon packet here.
+	 * Data packets are processed by netif_receive_skb().
+	 * Not sure if beacon packets need any processing present in netif_receive_skb()
+	 */
+
+
+	/* Step 1: Extract the following beacon data.
+	 *
+	 * Beacon indication contains the following data:
+	 * BSN :
+	 *       desc: beacon sequence number
+	 *       type: uint8_t
+	 * PAN descriptor :
+	 *       CoordAddrMode:
+	 *            desc:
+	 *            type: enum
+	 *       CoordPanId:
+	 *            desc: PanID of the coordinator
+	 *            type:
+	 *       Channel Number:
+	 *            desc:
+	 *            type:
+	 *       Channel Page:
+	 *            desc:
+	 *            type:
+	 *       Superframe Spec:
+	 *            desc:
+	 *            type:
+	 *       GTP Permit:
+	 *            desc:
+	 *            type:
+	 *       Link Quality:
+	 *            desc:
+	 *            type: integer
+	 *       Timestamp
+	 *            desc:
+	 *            type: integer
+	 *
+	 * PendAddrSpec:
+	 *       desc: Beacon pending address specification (?)
+	 *       type: bitfield
+	 *
+	 * AddrList:
+	 *
+	 * sduLength:
+	 *       desc: Number of octets (bytes?) contained in the beacon payload
+	 *
+	 * sdu:
+	 *       desc: Set of octets (bytes?) comprising the beacon payload
+	 *
+	 */
+
+	//The addressing fields shall comprise only the source address fields.
+	//The Source PAN Identifier and Source Address fields shall contain the PAN identifier and address,
+	//respectively, of the device transmitting the beacon.
+
+	link_quality = mac_cb(skb)->lqi;
+
+
+	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
+	 * where it can be accessed via netlink
+	 */
+	cfg802154_inform_beacon();
 }
 
 static int
@@ -96,9 +170,11 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	sdata->dev->stats.rx_packets++;
 	sdata->dev->stats.rx_bytes += skb->len;
 
-	switch (mac_cb(skb)->type) {
+	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
 		return ieee802154_deliver_skb(skb);
+	case IEEE802154_FC_TYPE_BEACON:
+		return ieee802154_deliver_bcn(skb, hdr);
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
