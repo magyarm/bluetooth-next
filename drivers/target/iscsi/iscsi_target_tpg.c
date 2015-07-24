@@ -18,6 +18,7 @@
 
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
+#include <target/target_core_configfs.h>
 
 #include <target/iscsi/iscsi_target_core.h>
 #include "iscsi_target_erl0.h"
@@ -66,12 +67,9 @@ int iscsit_load_discovery_tpg(void)
 		pr_err("Unable to allocate struct iscsi_portal_group\n");
 		return -1;
 	}
-	/*
-	 * Save iscsi_ops pointer for special case discovery TPG that
-	 * doesn't exist as se_wwn->wwn_group within configfs.
-	 */
-	tpg->tpg_se_tpg.se_tpg_tfo = &iscsi_ops;
-	ret = core_tpg_register(NULL, &tpg->tpg_se_tpg, -1);
+
+	ret = core_tpg_register(&iscsi_ops, NULL, &tpg->tpg_se_tpg,
+				tpg, TRANSPORT_TPG_TYPE_DISCOVERY);
 	if (ret < 0) {
 		kfree(tpg);
 		return -1;
@@ -281,6 +279,8 @@ int iscsit_tpg_del_portal_group(
 		tpg->tpg_state = old_state;
 		return -EPERM;
 	}
+
+	core_tpg_clear_object_luns(&tpg->tpg_se_tpg);
 
 	if (tpg->param_list) {
 		iscsi_release_param_list(tpg->param_list);

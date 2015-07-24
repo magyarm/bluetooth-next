@@ -281,25 +281,32 @@ EXPORT_SYMBOL_GPL(device_wakeup_enable);
  * Attach a device wakeirq to the wakeup source so the device
  * wake IRQ can be configured automatically for suspend and
  * resume.
- *
- * Call under the device's power.lock lock.
  */
 int device_wakeup_attach_irq(struct device *dev,
 			     struct wake_irq *wakeirq)
 {
 	struct wakeup_source *ws;
+	int ret = 0;
 
+	spin_lock_irq(&dev->power.lock);
 	ws = dev->power.wakeup;
 	if (!ws) {
 		dev_err(dev, "forgot to call call device_init_wakeup?\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto unlock;
 	}
 
-	if (ws->wakeirq)
-		return -EEXIST;
+	if (ws->wakeirq) {
+		ret = -EEXIST;
+		goto unlock;
+	}
 
 	ws->wakeirq = wakeirq;
-	return 0;
+
+unlock:
+	spin_unlock_irq(&dev->power.lock);
+
+	return ret;
 }
 
 /**
@@ -307,16 +314,20 @@ int device_wakeup_attach_irq(struct device *dev,
  * @dev: Device to handle
  *
  * Removes a device wakeirq from the wakeup source.
- *
- * Call under the device's power.lock lock.
  */
 void device_wakeup_detach_irq(struct device *dev)
 {
 	struct wakeup_source *ws;
 
+	spin_lock_irq(&dev->power.lock);
 	ws = dev->power.wakeup;
-	if (ws)
-		ws->wakeirq = NULL;
+	if (!ws)
+		goto unlock;
+
+	ws->wakeirq = NULL;
+
+unlock:
+	spin_unlock_irq(&dev->power.lock);
 }
 
 /**

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 Loongson Inc. & Lemote Inc. &
- *                    Institute of Computing Technology
+ *                    Insititute of Computing Technology
  * Author:  Xiang Gao, gaoxiang@ict.ac.cn
  *          Huacai Chen, chenhc@lemote.com
  *          Xiaofu Meng, Shuangshuang Zhang

@@ -446,12 +446,10 @@ static int dwc3_phy_setup(struct dwc3 *dwc)
 	/* Select the HS PHY interface */
 	switch (DWC3_GHWPARAMS3_HSPHY_IFC(dwc->hwparams.hwparams3)) {
 	case DWC3_GHWPARAMS3_HSPHY_IFC_UTMI_ULPI:
-		if (dwc->hsphy_interface &&
-				!strncmp(dwc->hsphy_interface, "utmi", 4)) {
+		if (!strncmp(dwc->hsphy_interface, "utmi", 4)) {
 			reg &= ~DWC3_GUSB2PHYCFG_ULPI_UTMI;
 			break;
-		} else if (dwc->hsphy_interface &&
-				!strncmp(dwc->hsphy_interface, "ulpi", 4)) {
+		} else if (!strncmp(dwc->hsphy_interface, "ulpi", 4)) {
 			reg |= DWC3_GUSB2PHYCFG_ULPI_UTMI;
 			dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 		} else {

@@ -155,7 +155,7 @@ static ssize_t dax_io(struct inode *inode, struct iov_iter *iter,
 		}
 
 		if (iov_iter_rw(iter) == WRITE)
-			len = copy_from_iter_nocache(addr, max - pos, iter);
+			len = copy_from_iter(addr, max - pos, iter);
 		else if (!hole)
 			len = copy_to_iter(addr, max - pos, iter);
 		else
@@ -209,8 +209,7 @@ ssize_t dax_do_io(struct kiocb *iocb, struct inode *inode,
 	}
 
 	/* Protects against truncate */
-	if (!(flags & DIO_SKIP_DIO_COUNT))
-		inode_dio_begin(inode);
+	inode_dio_begin(inode);
 
 	retval = dax_io(inode, iter, pos, end, get_block, &bh);
 
@@ -220,8 +219,7 @@ ssize_t dax_do_io(struct kiocb *iocb, struct inode *inode,
 	if ((retval > 0) && end_io)
 		end_io(iocb, pos, retval, bh.b_private);
 
-	if (!(flags & DIO_SKIP_DIO_COUNT))
-		inode_dio_end(inode);
+	inode_dio_end(inode);
  out:
 	return retval;
 }

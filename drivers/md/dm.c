@@ -1067,10 +1067,13 @@ static void rq_end_stats(struct mapped_device *md, struct request *orig)
  */
 static void rq_completed(struct mapped_device *md, int rw, bool run_queue)
 {
+	int nr_requests_pending;
+
 	atomic_dec(&md->pending[rw]);
 
 	/* nudge anyone waiting on suspend queue */
-	if (!md_in_flight(md))
+	nr_requests_pending = md_in_flight(md);
+	if (!nr_requests_pending)
 		wake_up(&md->wait);
 
 	/*
@@ -1082,7 +1085,8 @@ static void rq_completed(struct mapped_device *md, int rw, bool run_queue)
 	if (run_queue) {
 		if (md->queue->mq_ops)
 			blk_mq_run_hw_queues(md->queue, true);
-		else
+		else if (!nr_requests_pending ||
+			 (nr_requests_pending >= md->queue->nr_congestion_on))
 			blk_run_queue_async(md->queue);
 	}
 
@@ -2277,6 +2281,8 @@ static void dm_init_old_md_queue(struct mapped_device *md)
 
 static void cleanup_mapped_device(struct mapped_device *md)
 {
+	cleanup_srcu_struct(&md->io_barrier);
+
 	if (md->wq)
 		destroy_workqueue(md->wq);
 	if (md->kworker_task)
@@ -2287,8 +2293,6 @@ static void cleanup_mapped_device(struct mapped_device *md)
 		mempool_destroy(md->rq_pool);
 	if (md->bs)
 		bioset_free(md->bs);
-
-	cleanup_srcu_struct(&md->io_barrier);
 
 	if (md->disk) {
 		spin_lock(&_minor_lock);

@@ -114,7 +114,7 @@ acpi_get_handle(acpi_handle parent,
 
 		/* Special case for root-only, since we can't search for it */
 
-		if (!strcmp(pathname, ACPI_NS_ROOT_PATH)) {
+		if (!ACPI_STRCMP(pathname, ACPI_NS_ROOT_PATH)) {
 			*ret_handle =
 			    ACPI_CAST_PTR(acpi_handle, acpi_gbl_root_node);
 			return (AE_OK);
@@ -242,7 +242,7 @@ static char *acpi_ns_copy_device_id(struct acpi_pnp_device_id *dest,
 
 	/* Copy actual string and return a pointer to the next string area */
 
-	memcpy(string_area, source->string, source->length);
+	ACPI_MEMCPY(string_area, source->string, source->length);
 	return (string_area + source->length);
 }
 
@@ -260,7 +260,7 @@ static char *acpi_ns_copy_device_id(struct acpi_pnp_device_id *dest,
  *              control methods (Such as in the case of a device.)
  *
  * For Device and Processor objects, run the Device _HID, _UID, _CID, _SUB,
- * _CLS, _STA, _ADR, _sx_w, and _sx_d methods.
+ * _STA, _ADR, _sx_w, and _sx_d methods.
  *
  * Note: Allocates the return buffer, must be freed by the caller.
  *
@@ -276,12 +276,11 @@ acpi_get_object_info(acpi_handle handle,
 	struct acpi_pnp_device_id *hid = NULL;
 	struct acpi_pnp_device_id *uid = NULL;
 	struct acpi_pnp_device_id *sub = NULL;
-	struct acpi_pnp_device_id *cls = NULL;
 	char *next_id_string;
 	acpi_object_type type;
 	acpi_name name;
 	u8 param_count = 0;
-	u16 valid = 0;
+	u8 valid = 0;
 	u32 info_size;
 	u32 i;
 	acpi_status status;
@@ -321,7 +320,7 @@ acpi_get_object_info(acpi_handle handle,
 	if ((type == ACPI_TYPE_DEVICE) || (type == ACPI_TYPE_PROCESSOR)) {
 		/*
 		 * Get extra info for ACPI Device/Processor objects only:
-		 * Run the Device _HID, _UID, _SUB, _CID, and _CLS methods.
+		 * Run the Device _HID, _UID, _SUB, and _CID methods.
 		 *
 		 * Note: none of these methods are required, so they may or may
 		 * not be present for this device. The Info->Valid bitfield is used
@@ -363,14 +362,6 @@ acpi_get_object_info(acpi_handle handle,
 			    (cid_list->list_size -
 			     sizeof(struct acpi_pnp_device_id_list));
 			valid |= ACPI_VALID_CID;
-		}
-
-		/* Execute the Device._CLS method */
-
-		status = acpi_ut_execute_CLS(node, &cls);
-		if (ACPI_SUCCESS(status)) {
-			info_size += cls->length;
-			valid |= ACPI_VALID_CLS;
 		}
 	}
 
@@ -495,11 +486,6 @@ acpi_get_object_info(acpi_handle handle,
 		}
 	}
 
-	if (cls) {
-		next_id_string = acpi_ns_copy_device_id(&info->class_code,
-							cls, next_id_string);
-	}
-
 	/* Copy the fixed-length data */
 
 	info->info_size = info_size;
@@ -523,9 +509,6 @@ cleanup:
 	}
 	if (cid_list) {
 		ACPI_FREE(cid_list);
-	}
-	if (cls) {
-		ACPI_FREE(cls);
 	}
 	return (status);
 }
@@ -637,7 +620,7 @@ acpi_status acpi_install_method(u8 *buffer)
 
 	/* Copy the method AML to the local buffer */
 
-	memcpy(aml_buffer, aml_start, aml_length);
+	ACPI_MEMCPY(aml_buffer, aml_start, aml_length);
 
 	/* Initialize the method object with the new method's information */
 

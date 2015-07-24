@@ -114,8 +114,8 @@ void perf_evlist__delete(struct perf_evlist *evlist)
 {
 	perf_evlist__munmap(evlist);
 	perf_evlist__close(evlist);
-	cpu_map__put(evlist->cpus);
-	thread_map__put(evlist->threads);
+	cpu_map__delete(evlist->cpus);
+	thread_map__delete(evlist->threads);
 	evlist->cpus = NULL;
 	evlist->threads = NULL;
 	perf_evlist__purge(evlist);
@@ -548,7 +548,7 @@ static void perf_evlist__set_sid_idx(struct perf_evlist *evlist,
 	else
 		sid->cpu = -1;
 	if (!evsel->system_wide && evlist->threads && thread >= 0)
-		sid->tid = thread_map__pid(evlist->threads, thread);
+		sid->tid = evlist->threads->map[thread];
 	else
 		sid->tid = -1;
 }
@@ -1101,31 +1101,6 @@ int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 	return perf_evlist__mmap_ex(evlist, pages, overwrite, 0, false);
 }
 
-static int perf_evlist__propagate_maps(struct perf_evlist *evlist,
-				       struct target *target)
-{
-	struct perf_evsel *evsel;
-
-	evlist__for_each(evlist, evsel) {
-		/*
-		 * We already have cpus for evsel (via PMU sysfs) so
-		 * keep it, if there's no target cpu list defined.
-		 */
-		if (evsel->cpus && target->cpu_list)
-			cpu_map__put(evsel->cpus);
-
-		if (!evsel->cpus || target->cpu_list)
-			evsel->cpus = cpu_map__get(evlist->cpus);
-
-		evsel->threads = thread_map__get(evlist->threads);
-
-		if (!evsel->cpus || !evsel->threads)
-			return -ENOMEM;
-	}
-
-	return 0;
-}
-
 int perf_evlist__create_maps(struct perf_evlist *evlist, struct target *target)
 {
 	evlist->threads = thread_map__new_str(target->pid, target->tid,
@@ -1142,10 +1117,10 @@ int perf_evlist__create_maps(struct perf_evlist *evlist, struct target *target)
 	if (evlist->cpus == NULL)
 		goto out_delete_threads;
 
-	return perf_evlist__propagate_maps(evlist, target);
+	return 0;
 
 out_delete_threads:
-	thread_map__put(evlist->threads);
+	thread_map__delete(evlist->threads);
 	evlist->threads = NULL;
 	return -1;
 }
@@ -1378,7 +1353,7 @@ static int perf_evlist__create_syswide_maps(struct perf_evlist *evlist)
 out:
 	return err;
 out_free_cpus:
-	cpu_map__put(evlist->cpus);
+	cpu_map__delete(evlist->cpus);
 	evlist->cpus = NULL;
 	goto out;
 }
@@ -1500,7 +1475,7 @@ int perf_evlist__prepare_workload(struct perf_evlist *evlist, struct target *tar
 				__func__, __LINE__);
 			goto out_close_pipes;
 		}
-		thread_map__set_pid(evlist->threads, 0, evlist->workload.pid);
+		evlist->threads->map[0] = evlist->workload.pid;
 	}
 
 	close(child_ready_pipe[1]);

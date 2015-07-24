@@ -77,7 +77,7 @@ static void geneve_rcv(struct geneve_sock *gs, struct sk_buff *skb)
 	struct vport *vport = gs->rcv_data;
 	struct genevehdr *geneveh = geneve_hdr(skb);
 	int opts_len;
-	struct ip_tunnel_info tun_info;
+	struct ovs_tunnel_info tun_info;
 	__be64 key;
 	__be16 flags;
 
@@ -90,9 +90,10 @@ static void geneve_rcv(struct geneve_sock *gs, struct sk_buff *skb)
 
 	key = vni_to_tunnel_id(geneveh->vni);
 
-	ip_tunnel_info_init(&tun_info, ip_hdr(skb),
-			    udp_hdr(skb)->source, udp_hdr(skb)->dest,
-			    key, flags, geneveh->options, opts_len);
+	ovs_flow_tun_info_init(&tun_info, ip_hdr(skb),
+			       udp_hdr(skb)->source, udp_hdr(skb)->dest,
+			       key, flags,
+			       geneveh->options, opts_len);
 
 	ovs_vport_receive(vport, skb, &tun_info);
 }
@@ -164,8 +165,8 @@ error:
 
 static int geneve_tnl_send(struct vport *vport, struct sk_buff *skb)
 {
-	const struct ip_tunnel_key *tun_key;
-	struct ip_tunnel_info *tun_info;
+	const struct ovs_key_ipv4_tunnel *tun_key;
+	struct ovs_tunnel_info *tun_info;
 	struct net *net = ovs_dp_get_net(vport->dp);
 	struct geneve_port *geneve_port = geneve_vport(vport);
 	__be16 dport = inet_sk(geneve_port->gs->sock->sk)->inet_sport;
@@ -182,7 +183,7 @@ static int geneve_tnl_send(struct vport *vport, struct sk_buff *skb)
 		goto error;
 	}
 
-	tun_key = &tun_info->key;
+	tun_key = &tun_info->tunnel;
 	rt = ovs_tunnel_route_lookup(net, tun_key, skb->mark, &fl, IPPROTO_UDP);
 	if (IS_ERR(rt)) {
 		err = PTR_ERR(rt);
@@ -224,7 +225,7 @@ static const char *geneve_get_name(const struct vport *vport)
 }
 
 static int geneve_get_egress_tun_info(struct vport *vport, struct sk_buff *skb,
-				      struct ip_tunnel_info *egress_tun_info)
+				      struct ovs_tunnel_info *egress_tun_info)
 {
 	struct geneve_port *geneve_port = geneve_vport(vport);
 	struct net *net = ovs_dp_get_net(vport->dp);

@@ -337,8 +337,7 @@ struct xgbe_buffer_data {
 	struct xgbe_page_alloc pa;
 	struct xgbe_page_alloc pa_unmap;
 
-	dma_addr_t dma_base;
-	unsigned long dma_off;
+	dma_addr_t dma;
 	unsigned int dma_len;
 };
 

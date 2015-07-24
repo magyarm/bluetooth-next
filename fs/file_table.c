@@ -20,6 +20,7 @@
 #include <linux/cdev.h>
 #include <linux/fsnotify.h>
 #include <linux/sysctl.h>
+#include <linux/lglock.h>
 #include <linux/percpu_counter.h>
 #include <linux/percpu.h>
 #include <linux/hardirq.h>

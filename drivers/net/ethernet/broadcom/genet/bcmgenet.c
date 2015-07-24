@@ -907,8 +907,9 @@ static void bcmgenet_power_up(struct bcmgenet_priv *priv,
 	}
 
 	bcmgenet_ext_writel(priv, reg, EXT_EXT_PWR_MGMT);
+
 	if (mode == GENET_POWER_PASSIVE)
-		bcmgenet_phy_power_set(priv->dev, true);
+		bcmgenet_mii_reset(priv->dev);
 }
 
 /* ioctl handle special commands that are not present in ethtool. */
@@ -1229,6 +1230,7 @@ static struct sk_buff *bcmgenet_put_tx_csum(struct net_device *dev,
 		new_skb = skb_realloc_headroom(skb, sizeof(*status));
 		dev_kfree_skb(skb);
 		if (!new_skb) {
+			dev->stats.tx_errors++;
 			dev->stats.tx_dropped++;
 			return NULL;
 		}
@@ -1463,6 +1465,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 
 		if (unlikely(!skb)) {
 			dev->stats.rx_dropped++;
+			dev->stats.rx_errors++;
 			goto next;
 		}
 
@@ -1490,6 +1493,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 		if (unlikely(!(dma_flag & DMA_EOP) || !(dma_flag & DMA_SOP))) {
 			netif_err(priv, rx_status, dev,
 				  "dropping fragmented packet!\n");
+			dev->stats.rx_dropped++;
 			dev->stats.rx_errors++;
 			dev_kfree_skb_any(skb);
 			goto next;
@@ -1511,6 +1515,7 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 				dev->stats.rx_frame_errors++;
 			if (dma_flag & DMA_RX_LG)
 				dev->stats.rx_length_errors++;
+			dev->stats.rx_dropped++;
 			dev->stats.rx_errors++;
 			dev_kfree_skb_any(skb);
 			goto next;
@@ -1724,7 +1729,7 @@ static int init_umac(struct bcmgenet_priv *priv)
 	int0_enable |= UMAC_IRQ_TXDMA_DONE;
 
 	/* Monitor cable plug/unplugged event for internal PHY */
-	if (priv->internal_phy) {
+	if (phy_is_internal(priv->phydev)) {
 		int0_enable |= UMAC_IRQ_LINK_EVENT;
 	} else if (priv->ext_phy) {
 		int0_enable |= UMAC_IRQ_LINK_EVENT;
@@ -2631,7 +2636,7 @@ static int bcmgenet_open(struct net_device *dev)
 	/* If this is an internal GPHY, power it back on now, before UniMAC is
 	 * brought out of reset as absolutely no UniMAC activity is allowed
 	 */
-	if (priv->internal_phy)
+	if (phy_is_internal(priv->phydev))
 		bcmgenet_power_up(priv, GENET_POWER_PASSIVE);
 
 	/* take MAC out of reset */
@@ -2650,7 +2655,7 @@ static int bcmgenet_open(struct net_device *dev)
 
 	bcmgenet_set_hw_addr(priv, dev->dev_addr);
 
-	if (priv->internal_phy) {
+	if (phy_is_internal(priv->phydev)) {
 		reg = bcmgenet_ext_readl(priv, EXT_EXT_PWR_MGMT);
 		reg |= EXT_ENERGY_DET_MASK;
 		bcmgenet_ext_writel(priv, reg, EXT_EXT_PWR_MGMT);
@@ -2686,20 +2691,18 @@ static int bcmgenet_open(struct net_device *dev)
 		goto err_irq0;
 	}
 
-	ret = bcmgenet_mii_probe(dev);
-	if (ret) {
-		netdev_err(dev, "failed to connect to PHY\n");
-		goto err_irq1;
-	}
+	/* Re-configure the port multiplexer towards the PHY device */
+	bcmgenet_mii_config(priv->dev, false);
+
+	phy_connect_direct(dev, priv->phydev, bcmgenet_mii_setup,
+			   priv->phy_interface);
 
 	bcmgenet_netif_start(dev);
 
 	return 0;
 
-err_irq1:
-	free_irq(priv->irq1, priv);
 err_irq0:
-	free_irq(priv->irq0, priv);
+	free_irq(priv->irq0, dev);
 err_fini_dma:
 	bcmgenet_fini_dma(priv);
 err_clk_disable:
@@ -2758,7 +2761,7 @@ static int bcmgenet_close(struct net_device *dev)
 	free_irq(priv->irq0, priv);
 	free_irq(priv->irq1, priv);
 
-	if (priv->internal_phy)
+	if (phy_is_internal(priv->phydev))
 		ret = bcmgenet_power_down(priv, GENET_POWER_PASSIVE);
 
 	if (!IS_ERR(priv->clk))
@@ -3320,7 +3323,7 @@ static int bcmgenet_suspend(struct device *d)
 	if (device_may_wakeup(d) && priv->wolopts) {
 		ret = bcmgenet_power_down(priv, GENET_POWER_WOL_MAGIC);
 		clk_prepare_enable(priv->clk_wol);
-	} else if (priv->internal_phy) {
+	} else if (phy_is_internal(priv->phydev)) {
 		ret = bcmgenet_power_down(priv, GENET_POWER_PASSIVE);
 	}
 
@@ -3349,7 +3352,7 @@ static int bcmgenet_resume(struct device *d)
 	/* If this is an internal GPHY, power it back on now, before UniMAC is
 	 * brought out of reset as absolutely no UniMAC activity is allowed
 	 */
-	if (priv->internal_phy)
+	if (phy_is_internal(priv->phydev))
 		bcmgenet_power_up(priv, GENET_POWER_PASSIVE);
 
 	bcmgenet_umac_reset(priv);
@@ -3364,14 +3367,14 @@ static int bcmgenet_resume(struct device *d)
 
 	phy_init_hw(priv->phydev);
 	/* Speed settings must be restored */
-	bcmgenet_mii_config(priv->dev);
+	bcmgenet_mii_config(priv->dev, false);
 
 	/* disable ethernet MAC while updating its registers */
 	umac_enable_set(priv, CMD_TX_EN | CMD_RX_EN, false);
 
 	bcmgenet_set_hw_addr(priv, dev->dev_addr);
 
-	if (priv->internal_phy) {
+	if (phy_is_internal(priv->phydev)) {
 		reg = bcmgenet_ext_readl(priv, EXT_EXT_PWR_MGMT);
 		reg |= EXT_ENERGY_DET_MASK;
 		bcmgenet_ext_writel(priv, reg, EXT_EXT_PWR_MGMT);

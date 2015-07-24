@@ -69,17 +69,16 @@ NESTED(handle_sys, PT_SIZE, sp)
 	daddu	t1, t0, 32
 	bltz	t1, bad_stack
 
-load_a4: lw	a4, 16(t0)		# argument #5 from usp
-load_a5: lw	a5, 20(t0)		# argument #6 from usp
-load_a6: lw	a6, 24(t0)		# argument #7 from usp
-load_a7: lw	a7, 28(t0)		# argument #8 from usp
-loads_done:
+1:	lw	a4, 16(t0)		# argument #5 from usp
+2:	lw	a5, 20(t0)		# argument #6 from usp
+3:	lw	a6, 24(t0)		# argument #7 from usp
+4:	lw	a7, 28(t0)		# argument #8 from usp (for indirect syscalls)
 
 	.section __ex_table,"a"
-	PTR	load_a4, bad_stack_a4
-	PTR	load_a5, bad_stack_a5
-	PTR	load_a6, bad_stack_a6
-	PTR	load_a7, bad_stack_a7
+	PTR	1b, bad_stack
+	PTR	2b, bad_stack
+	PTR	3b, bad_stack
+	PTR	4b, bad_stack
 	.previous
 
 	li	t1, _TIF_WORK_SYSCALL_ENTRY
@@ -167,22 +166,6 @@ bad_stack:
 	li	t0, 1			# set error flag
 	sd	t0, PT_R7(sp)
 	j	o32_syscall_exit
-
-bad_stack_a4:
-	li	a4, 0
-	b	load_a5
-
-bad_stack_a5:
-	li	a5, 0
-	b	load_a6
-
-bad_stack_a6:
-	li	a6, 0
-	b	load_a7
-
-bad_stack_a7:
-	li	a7, 0
-	b	loads_done
 
 not_o32_scall:
 	/*
@@ -400,7 +383,7 @@ EXPORT(sys32_call_table)
 	PTR	sys_connect			/* 4170 */
 	PTR	sys_getpeername
 	PTR	sys_getsockname
-	PTR	compat_sys_getsockopt
+	PTR	sys_getsockopt
 	PTR	sys_listen
 	PTR	compat_sys_recv			/* 4175 */
 	PTR	compat_sys_recvfrom

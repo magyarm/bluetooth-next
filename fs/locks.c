@@ -862,11 +862,12 @@ static int posix_locks_deadlock(struct file_lock *caller_fl,
  * whether or not a lock was successfully freed by testing the return
  * value for -ENOENT.
  */
-static int flock_lock_inode(struct inode *inode, struct file_lock *request)
+static int flock_lock_file(struct file *filp, struct file_lock *request)
 {
 	struct file_lock *new_fl = NULL;
 	struct file_lock *fl;
 	struct file_lock_context *ctx;
+	struct inode *inode = file_inode(filp);
 	int error = 0;
 	bool found = false;
 	LIST_HEAD(dispose);
@@ -889,7 +890,7 @@ static int flock_lock_inode(struct inode *inode, struct file_lock *request)
 		goto find_conflict;
 
 	list_for_each_entry(fl, &ctx->flc_flock, fl_list) {
-		if (request->fl_file != fl->fl_file)
+		if (filp != fl->fl_file)
 			continue;
 		if (request->fl_type == fl->fl_type)
 			goto out;
@@ -1163,19 +1164,20 @@ int posix_lock_file(struct file *filp, struct file_lock *fl,
 EXPORT_SYMBOL(posix_lock_file);
 
 /**
- * posix_lock_inode_wait - Apply a POSIX-style lock to a file
- * @inode: inode of file to which lock request should be applied
+ * posix_lock_file_wait - Apply a POSIX-style lock to a file
+ * @filp: The file to apply the lock to
  * @fl: The lock to be applied
  *
- * Variant of posix_lock_file_wait that does not take a filp, and so can be
- * used after the filp has already been torn down.
+ * Add a POSIX style lock to a file.
+ * We merge adjacent & overlapping locks whenever possible.
+ * POSIX locks are sorted by owner task, then by starting address
  */
-int posix_lock_inode_wait(struct inode *inode, struct file_lock *fl)
+int posix_lock_file_wait(struct file *filp, struct file_lock *fl)
 {
 	int error;
 	might_sleep ();
 	for (;;) {
-		error = __posix_lock_file(inode, fl, NULL);
+		error = posix_lock_file(filp, fl, NULL);
 		if (error != FILE_LOCK_DEFERRED)
 			break;
 		error = wait_event_interruptible(fl->fl_wait, !fl->fl_next);
@@ -1187,7 +1189,7 @@ int posix_lock_inode_wait(struct inode *inode, struct file_lock *fl)
 	}
 	return error;
 }
-EXPORT_SYMBOL(posix_lock_inode_wait);
+EXPORT_SYMBOL(posix_lock_file_wait);
 
 /**
  * locks_mandatory_locked - Check for an active lock
@@ -1849,18 +1851,18 @@ int fcntl_setlease(unsigned int fd, struct file *filp, long arg)
 }
 
 /**
- * flock_lock_inode_wait - Apply a FLOCK-style lock to a file
- * @inode: inode of the file to apply to
+ * flock_lock_file_wait - Apply a FLOCK-style lock to a file
+ * @filp: The file to apply the lock to
  * @fl: The lock to be applied
  *
- * Apply a FLOCK style lock request to an inode.
+ * Add a FLOCK style lock to a file.
  */
-int flock_lock_inode_wait(struct inode *inode, struct file_lock *fl)
+int flock_lock_file_wait(struct file *filp, struct file_lock *fl)
 {
 	int error;
 	might_sleep();
 	for (;;) {
-		error = flock_lock_inode(inode, fl);
+		error = flock_lock_file(filp, fl);
 		if (error != FILE_LOCK_DEFERRED)
 			break;
 		error = wait_event_interruptible(fl->fl_wait, !fl->fl_next);
@@ -1872,7 +1874,8 @@ int flock_lock_inode_wait(struct inode *inode, struct file_lock *fl)
 	}
 	return error;
 }
-EXPORT_SYMBOL(flock_lock_inode_wait);
+
+EXPORT_SYMBOL(flock_lock_file_wait);
 
 /**
  *	sys_flock: - flock() system call.
@@ -2398,8 +2401,7 @@ locks_remove_flock(struct file *filp)
 		.fl_type = F_UNLCK,
 		.fl_end = OFFSET_MAX,
 	};
-	struct inode *inode = file_inode(filp);
-	struct file_lock_context *flctx = inode->i_flctx;
+	struct file_lock_context *flctx = file_inode(filp)->i_flctx;
 
 	if (list_empty(&flctx->flc_flock))
 		return;
@@ -2407,7 +2409,7 @@ locks_remove_flock(struct file *filp)
 	if (filp->f_op->flock)
 		filp->f_op->flock(filp, F_SETLKW, &fl);
 	else
-		flock_lock_inode(inode, &fl);
+		flock_lock_file(filp, &fl);
 
 	if (fl.fl_ops && fl.fl_ops->fl_release_private)
 		fl.fl_ops->fl_release_private(&fl);

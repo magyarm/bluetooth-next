@@ -137,7 +137,7 @@ endif
 
 ifneq ($(wildcard $(obj)/.x509.list),)
 ifneq ($(shell cat $(obj)/.x509.list),$(X509_CERTIFICATES))
-$(warning X.509 certificate list changed to "$(X509_CERTIFICATES)" from "$(shell cat $(obj)/.x509.list)")
+$(info X.509 certificate list changed)
 $(shell rm $(obj)/.x509.list)
 endif
 endif

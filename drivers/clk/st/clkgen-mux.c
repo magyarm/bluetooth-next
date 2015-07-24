@@ -237,7 +237,7 @@ static struct clk *clk_register_genamux(const char *name,
 
 	init.name = name;
 	init.ops = &clkgena_divmux_ops;
-	init.flags = CLK_IS_BASIC | CLK_GET_RATE_NOCACHE;
+	init.flags = CLK_IS_BASIC;
 	init.parent_names = parent_names;
 	init.num_parents = num_parents;
 
@@ -513,8 +513,7 @@ static void __init st_of_clkgena_prediv_setup(struct device_node *np)
 					  0, &clk_name))
 		return;
 
-	clk = clk_register_divider_table(NULL, clk_name, parent_name,
-					 CLK_GET_RATE_NOCACHE,
+	clk = clk_register_divider_table(NULL, clk_name, parent_name, 0,
 					 reg + data->offset, data->shift, 1,
 					 0, data->table, NULL);
 	if (IS_ERR(clk))
@@ -583,7 +582,7 @@ static struct clkgen_mux_data stih416_a9_mux_data = {
 };
 static struct clkgen_mux_data stih407_a9_mux_data = {
 	.offset = 0x1a4,
-	.shift = 0,
+	.shift = 1,
 	.width = 2,
 };
 
@@ -787,8 +786,7 @@ static void __init st_of_clkgen_vcc_setup(struct device_node *np)
 					     &mux->hw, &clk_mux_ops,
 					     &div->hw, &clk_divider_ops,
 					     &gate->hw, &clk_gate_ops,
-					     data->clk_flags |
-					     CLK_GET_RATE_NOCACHE);
+					     data->clk_flags);
 		if (IS_ERR(clk)) {
 			kfree(gate);
 			kfree(div);

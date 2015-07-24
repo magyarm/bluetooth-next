@@ -64,8 +64,7 @@ struct config_item {
 	struct dentry		*ci_dentry;
 };
 
-extern __printf(2, 3)
-int config_item_set_name(struct config_item *, const char *, ...);
+extern int config_item_set_name(struct config_item *, const char *, ...);
 
 static inline char *config_item_name(struct config_item * item)
 {

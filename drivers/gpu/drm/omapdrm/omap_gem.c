@@ -808,10 +808,10 @@ fail:
 /* Release physical address, when DMA is no longer being performed.. this
  * could potentially unpin and unmap buffers from TILER
  */
-void omap_gem_put_paddr(struct drm_gem_object *obj)
+int omap_gem_put_paddr(struct drm_gem_object *obj)
 {
 	struct omap_gem_object *omap_obj = to_omap_bo(obj);
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&obj->dev->struct_mutex);
 	if (omap_obj->paddr_cnt > 0) {
@@ -821,6 +821,7 @@ void omap_gem_put_paddr(struct drm_gem_object *obj)
 			if (ret) {
 				dev_err(obj->dev->dev,
 					"could not unpin pages: %d\n", ret);
+				goto fail;
 			}
 			ret = tiler_release(omap_obj->block);
 			if (ret) {
@@ -831,8 +832,9 @@ void omap_gem_put_paddr(struct drm_gem_object *obj)
 			omap_obj->block = NULL;
 		}
 	}
-
+fail:
 	mutex_unlock(&obj->dev->struct_mutex);
+	return ret;
 }
 
 /* Get rotated scanout address (only valid if already pinned), at the
@@ -1376,7 +1378,11 @@ struct drm_gem_object *omap_gem_new(struct drm_device *dev,
 
 	omap_obj = kzalloc(sizeof(*omap_obj), GFP_KERNEL);
 	if (!omap_obj)
-		return NULL;
+		goto fail;
+
+	spin_lock(&priv->list_lock);
+	list_add(&omap_obj->mm_list, &priv->obj_list);
+	spin_unlock(&priv->list_lock);
 
 	obj = &omap_obj->base;
 
@@ -1386,18 +1392,10 @@ struct drm_gem_object *omap_gem_new(struct drm_device *dev,
 		 */
 		omap_obj->vaddr =  dma_alloc_writecombine(dev->dev, size,
 				&omap_obj->paddr, GFP_KERNEL);
-		if (!omap_obj->vaddr) {
-			kfree(omap_obj);
+		if (omap_obj->vaddr)
+			flags |= OMAP_BO_DMA;
 
-			return NULL;
-		}
-
-		flags |= OMAP_BO_DMA;
 	}
-
-	spin_lock(&priv->list_lock);
-	list_add(&omap_obj->mm_list, &priv->obj_list);
-	spin_unlock(&priv->list_lock);
 
 	omap_obj->flags = flags;
 

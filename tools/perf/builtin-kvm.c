@@ -1061,10 +1061,8 @@ static int read_events(struct perf_kvm_stat *kvm)
 
 	symbol__init(&kvm->session->header.env);
 
-	if (!perf_session__has_traces(kvm->session, "kvm record")) {
-		ret = -EINVAL;
-		goto out_delete;
-	}
+	if (!perf_session__has_traces(kvm->session, "kvm record"))
+		return -EINVAL;
 
 	/*
 	 * Do not use 'isa' recorded in kvm_exit tracepoint since it is not
@@ -1072,13 +1070,9 @@ static int read_events(struct perf_kvm_stat *kvm)
 	 */
 	ret = cpu_isa_config(kvm);
 	if (ret < 0)
-		goto out_delete;
+		return ret;
 
-	ret = perf_session__process_events(kvm->session);
-
-out_delete:
-	perf_session__delete(kvm->session);
-	return ret;
+	return perf_session__process_events(kvm->session);
 }
 
 static int parse_target_str(struct perf_kvm_stat *kvm)

@@ -104,20 +104,18 @@ static int dwmac1000_validate_ucast_entries(int ucast_entries)
  * this function is to read the driver parameters from device-tree and
  * set some private fields that will be used by the main at runtime.
  */
-struct plat_stmmacenet_data *
-stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
+static int stmmac_probe_config_dt(struct platform_device *pdev,
+				  struct plat_stmmacenet_data *plat,
+				  const char **mac)
 {
 	struct device_node *np = pdev->dev.of_node;
-	struct plat_stmmacenet_data *plat;
-	const struct stmmac_of_data *data;
 	struct stmmac_dma_cfg *dma_cfg;
+	const struct of_device_id *device;
+	struct device *dev = &pdev->dev;
 
-	plat = devm_kzalloc(&pdev->dev, sizeof(*plat), GFP_KERNEL);
-	if (!plat)
-		return ERR_PTR(-ENOMEM);
-
-	data = of_device_get_match_data(&pdev->dev);
-	if (data) {
+	device = of_match_device(dev->driver->of_match_table, dev);
+	if (device->data) {
+		const struct stmmac_of_data *data = device->data;
 		plat->has_gmac = data->has_gmac;
 		plat->enh_desc = data->enh_desc;
 		plat->tx_coe = data->tx_coe;
@@ -153,7 +151,7 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 	/* If phy-handle is not specified, check if we have a fixed-phy */
 	if (!plat->phy_node && of_phy_is_fixed_link(np)) {
 		if ((of_phy_register_fixed_link(np) < 0))
-			return ERR_PTR(-ENODEV);
+			return -ENODEV;
 
 		plat->phy_node = of_node_get(np);
 	}
@@ -183,12 +181,6 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 	 * parameter is not present in the device tree.
 	 */
 	plat->maxmtu = JUMBO_LEN;
-
-	/* Set default value for multicast hash bins */
-	plat->multicast_filter_bins = HASH_TABLE_SIZE;
-
-	/* Set default value for unicast filter entries */
-	plat->unicast_filter_entries = 1;
 
 	/*
 	 * Currently only the properties needed on SPEAr600
@@ -230,7 +222,7 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 				       GFP_KERNEL);
 		if (!dma_cfg) {
 			of_node_put(np);
-			return ERR_PTR(-ENOMEM);
+			return -ENOMEM;
 		}
 		plat->dma_cfg = dma_cfg;
 		of_property_read_u32(np, "snps,pbl", &dma_cfg->pbl);
@@ -248,62 +240,16 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 		pr_warn("force_sf_dma_mode is ignored if force_thresh_dma_mode is set.");
 	}
 
-	return plat;
-}
-#else
-struct plat_stmmacenet_data *
-stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
-{
-	return ERR_PTR(-ENOSYS);
-}
-#endif /* CONFIG_OF */
-EXPORT_SYMBOL_GPL(stmmac_probe_config_dt);
-
-int stmmac_get_platform_resources(struct platform_device *pdev,
-				  struct stmmac_resources *stmmac_res)
-{
-	struct resource *res;
-
-	memset(stmmac_res, 0, sizeof(*stmmac_res));
-
-	/* Get IRQ information early to have an ability to ask for deferred
-	 * probe if needed before we went too far with resource allocation.
-	 */
-	stmmac_res->irq = platform_get_irq_byname(pdev, "macirq");
-	if (stmmac_res->irq < 0) {
-		if (stmmac_res->irq != -EPROBE_DEFER) {
-			dev_err(&pdev->dev,
-				"MAC IRQ configuration information not found\n");
-		}
-		return stmmac_res->irq;
-	}
-
-	/* On some platforms e.g. SPEAr the wake up irq differs from the mac irq
-	 * The external wake up irq can be passed through the platform code
-	 * named as "eth_wake_irq"
-	 *
-	 * In case the wake up interrupt is not passed from the platform
-	 * so the driver will continue to use the mac irq (ndev->irq)
-	 */
-	stmmac_res->wol_irq = platform_get_irq_byname(pdev, "eth_wake_irq");
-	if (stmmac_res->wol_irq < 0) {
-		if (stmmac_res->wol_irq == -EPROBE_DEFER)
-			return -EPROBE_DEFER;
-		stmmac_res->wol_irq = stmmac_res->irq;
-	}
-
-	stmmac_res->lpi_irq = platform_get_irq_byname(pdev, "eth_lpi");
-	if (stmmac_res->lpi_irq == -EPROBE_DEFER)
-		return -EPROBE_DEFER;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	stmmac_res->addr = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(stmmac_res->addr))
-		return PTR_ERR(stmmac_res->addr);
-
 	return 0;
 }
-EXPORT_SYMBOL_GPL(stmmac_get_platform_resources);
+#else
+static int stmmac_probe_config_dt(struct platform_device *pdev,
+				  struct plat_stmmacenet_data *plat,
+				  const char **mac)
+{
+	return -ENOSYS;
+}
+#endif /* CONFIG_OF */
 
 /**
  * stmmac_pltfr_probe - platform driver probe.
@@ -314,32 +260,72 @@ EXPORT_SYMBOL_GPL(stmmac_get_platform_resources);
  */
 int stmmac_pltfr_probe(struct platform_device *pdev)
 {
-	struct plat_stmmacenet_data *plat_dat;
 	struct stmmac_resources stmmac_res;
-	int ret;
+	int ret = 0;
+	struct resource *res;
+	struct device *dev = &pdev->dev;
+	struct plat_stmmacenet_data *plat_dat = NULL;
 
-	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
-	if (ret)
-		return ret;
+	memset(&stmmac_res, 0, sizeof(stmmac_res));
+
+	/* Get IRQ information early to have an ability to ask for deferred
+	 * probe if needed before we went too far with resource allocation.
+	 */
+	stmmac_res.irq = platform_get_irq_byname(pdev, "macirq");
+	if (stmmac_res.irq < 0) {
+		if (stmmac_res.irq != -EPROBE_DEFER) {
+			dev_err(dev,
+				"MAC IRQ configuration information not found\n");
+		}
+		return stmmac_res.irq;
+	}
+
+	/* On some platforms e.g. SPEAr the wake up irq differs from the mac irq
+	 * The external wake up irq can be passed through the platform code
+	 * named as "eth_wake_irq"
+	 *
+	 * In case the wake up interrupt is not passed from the platform
+	 * so the driver will continue to use the mac irq (ndev->irq)
+	 */
+	stmmac_res.wol_irq = platform_get_irq_byname(pdev, "eth_wake_irq");
+	if (stmmac_res.wol_irq < 0) {
+		if (stmmac_res.wol_irq == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
+		stmmac_res.wol_irq = stmmac_res.irq;
+	}
+
+	stmmac_res.lpi_irq = platform_get_irq_byname(pdev, "eth_lpi");
+	if (stmmac_res.lpi_irq == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	stmmac_res.addr = devm_ioremap_resource(dev, res);
+	if (IS_ERR(stmmac_res.addr))
+		return PTR_ERR(stmmac_res.addr);
+
+	plat_dat = dev_get_platdata(&pdev->dev);
+
+	if (!plat_dat)
+		plat_dat = devm_kzalloc(&pdev->dev,
+					sizeof(struct plat_stmmacenet_data),
+					GFP_KERNEL);
+	if (!plat_dat) {
+		pr_err("%s: ERROR: no memory", __func__);
+		return  -ENOMEM;
+	}
+
+	/* Set default value for multicast hash bins */
+	plat_dat->multicast_filter_bins = HASH_TABLE_SIZE;
+
+	/* Set default value for unicast filter entries */
+	plat_dat->unicast_filter_entries = 1;
 
 	if (pdev->dev.of_node) {
-		plat_dat = stmmac_probe_config_dt(pdev, &stmmac_res.mac);
-		if (IS_ERR(plat_dat)) {
-			dev_err(&pdev->dev, "dt configuration failed\n");
-			return PTR_ERR(plat_dat);
+		ret = stmmac_probe_config_dt(pdev, plat_dat, &stmmac_res.mac);
+		if (ret) {
+			pr_err("%s: main dt probe failed", __func__);
+			return ret;
 		}
-	} else {
-		plat_dat = dev_get_platdata(&pdev->dev);
-		if (!plat_dat) {
-			dev_err(&pdev->dev, "no platform data provided\n");
-			return  -EINVAL;
-		}
-
-		/* Set default value for multicast hash bins */
-		plat_dat->multicast_filter_bins = HASH_TABLE_SIZE;
-
-		/* Set default value for unicast filter entries */
-		plat_dat->unicast_filter_entries = 1;
 	}
 
 	/* Custom setup (if needed) */

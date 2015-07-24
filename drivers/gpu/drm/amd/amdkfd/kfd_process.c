@@ -420,12 +420,6 @@ void kfd_unbind_process_from_device(struct kfd_dev *dev, unsigned int pasid)
 	pqm_uninit(&p->pqm);
 
 	pdd = kfd_get_process_device_data(dev, p);
-
-	if (!pdd) {
-		mutex_unlock(&p->mutex);
-		return;
-	}
-
 	if (pdd->reset_wavefronts) {
 		dbgdev_wave_reset_wavefronts(pdd->dev, p);
 		pdd->reset_wavefronts = false;
@@ -437,7 +431,8 @@ void kfd_unbind_process_from_device(struct kfd_dev *dev, unsigned int pasid)
 	 * We don't call amd_iommu_unbind_pasid() here
 	 * because the IOMMU called us.
 	 */
-	pdd->bound = false;
+	if (pdd)
+		pdd->bound = false;
 
 	mutex_unlock(&p->mutex);
 }

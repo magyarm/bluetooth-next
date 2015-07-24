@@ -296,9 +296,6 @@ static void osd_req_op_data_release(struct ceph_osd_request *osd_req,
 	case CEPH_OSD_OP_CMPXATTR:
 		ceph_osd_data_release(&op->xattr.osd_data);
 		break;
-	case CEPH_OSD_OP_STAT:
-		ceph_osd_data_release(&op->raw_data_in);
-		break;
 	default:
 		break;
 	}
@@ -453,7 +450,7 @@ __CEPH_FORALL_OSD_OPS(GENERATE_CASE)
  */
 static struct ceph_osd_req_op *
 _osd_req_op_init(struct ceph_osd_request *osd_req, unsigned int which,
-		 u16 opcode, u32 flags)
+				u16 opcode)
 {
 	struct ceph_osd_req_op *op;
 
@@ -463,15 +460,14 @@ _osd_req_op_init(struct ceph_osd_request *osd_req, unsigned int which,
 	op = &osd_req->r_ops[which];
 	memset(op, 0, sizeof (*op));
 	op->op = opcode;
-	op->flags = flags;
 
 	return op;
 }
 
 void osd_req_op_init(struct ceph_osd_request *osd_req,
-		     unsigned int which, u16 opcode, u32 flags)
+				unsigned int which, u16 opcode)
 {
-	(void)_osd_req_op_init(osd_req, which, opcode, flags);
+	(void)_osd_req_op_init(osd_req, which, opcode);
 }
 EXPORT_SYMBOL(osd_req_op_init);
 
@@ -480,8 +476,7 @@ void osd_req_op_extent_init(struct ceph_osd_request *osd_req,
 				u64 offset, u64 length,
 				u64 truncate_size, u32 truncate_seq)
 {
-	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which,
-						      opcode, 0);
+	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which, opcode);
 	size_t payload_len = 0;
 
 	BUG_ON(opcode != CEPH_OSD_OP_READ && opcode != CEPH_OSD_OP_WRITE &&
@@ -520,8 +515,7 @@ EXPORT_SYMBOL(osd_req_op_extent_update);
 void osd_req_op_cls_init(struct ceph_osd_request *osd_req, unsigned int which,
 			u16 opcode, const char *class, const char *method)
 {
-	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which,
-						      opcode, 0);
+	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which, opcode);
 	struct ceph_pagelist *pagelist;
 	size_t payload_len = 0;
 	size_t size;
@@ -558,8 +552,7 @@ int osd_req_op_xattr_init(struct ceph_osd_request *osd_req, unsigned int which,
 			  u16 opcode, const char *name, const void *value,
 			  size_t size, u8 cmp_op, u8 cmp_mode)
 {
-	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which,
-						      opcode, 0);
+	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which, opcode);
 	struct ceph_pagelist *pagelist;
 	size_t payload_len;
 
@@ -592,8 +585,7 @@ void osd_req_op_watch_init(struct ceph_osd_request *osd_req,
 				unsigned int which, u16 opcode,
 				u64 cookie, u64 version, int flag)
 {
-	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which,
-						      opcode, 0);
+	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which, opcode);
 
 	BUG_ON(opcode != CEPH_OSD_OP_NOTIFY_ACK && opcode != CEPH_OSD_OP_WATCH);
 
@@ -610,8 +602,7 @@ void osd_req_op_alloc_hint_init(struct ceph_osd_request *osd_req,
 				u64 expected_write_size)
 {
 	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which,
-						      CEPH_OSD_OP_SETALLOCHINT,
-						      0);
+						      CEPH_OSD_OP_SETALLOCHINT);
 
 	op->alloc_hint.expected_object_size = expected_object_size;
 	op->alloc_hint.expected_write_size = expected_write_size;
@@ -795,7 +786,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	}
 
 	if (opcode == CEPH_OSD_OP_CREATE || opcode == CEPH_OSD_OP_DELETE) {
-		osd_req_op_init(req, which, opcode, 0);
+		osd_req_op_init(req, which, opcode);
 	} else {
 		u32 object_size = le32_to_cpu(layout->fl_object_size);
 		u32 object_base = off - objoff;
@@ -1097,7 +1088,7 @@ static void __move_osd_to_lru(struct ceph_osd_client *osdc,
 	BUG_ON(!list_empty(&osd->o_osd_lru));
 
 	list_add_tail(&osd->o_osd_lru, &osdc->osd_lru);
-	osd->lru_ttl = jiffies + osdc->client->options->osd_idle_ttl;
+	osd->lru_ttl = jiffies + osdc->client->options->osd_idle_ttl * HZ;
 }
 
 static void maybe_move_osd_to_lru(struct ceph_osd_client *osdc,
@@ -1208,7 +1199,7 @@ static struct ceph_osd *__lookup_osd(struct ceph_osd_client *osdc, int o)
 static void __schedule_osd_timeout(struct ceph_osd_client *osdc)
 {
 	schedule_delayed_work(&osdc->timeout_work,
-			      osdc->client->options->osd_keepalive_timeout);
+			osdc->client->options->osd_keepalive_timeout * HZ);
 }
 
 static void __cancel_osd_timeout(struct ceph_osd_client *osdc)
@@ -1576,9 +1567,10 @@ static void handle_timeout(struct work_struct *work)
 {
 	struct ceph_osd_client *osdc =
 		container_of(work, struct ceph_osd_client, timeout_work.work);
-	struct ceph_options *opts = osdc->client->options;
 	struct ceph_osd_request *req;
 	struct ceph_osd *osd;
+	unsigned long keepalive =
+		osdc->client->options->osd_keepalive_timeout * HZ;
 	struct list_head slow_osds;
 	dout("timeout\n");
 	down_read(&osdc->map_sem);
@@ -1594,8 +1586,7 @@ static void handle_timeout(struct work_struct *work)
 	 */
 	INIT_LIST_HEAD(&slow_osds);
 	list_for_each_entry(req, &osdc->req_lru, r_req_lru_item) {
-		if (time_before(jiffies,
-				req->r_stamp + opts->osd_keepalive_timeout))
+		if (time_before(jiffies, req->r_stamp + keepalive))
 			break;
 
 		osd = req->r_osd;
@@ -1622,7 +1613,8 @@ static void handle_osds_timeout(struct work_struct *work)
 	struct ceph_osd_client *osdc =
 		container_of(work, struct ceph_osd_client,
 			     osds_timeout_work.work);
-	unsigned long delay = osdc->client->options->osd_idle_ttl / 4;
+	unsigned long delay =
+		osdc->client->options->osd_idle_ttl * HZ >> 2;
 
 	dout("osds timeout\n");
 	down_read(&osdc->map_sem);
@@ -2627,7 +2619,7 @@ int ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	osdc->event_count = 0;
 
 	schedule_delayed_work(&osdc->osds_timeout_work,
-	    round_jiffies_relative(osdc->client->options->osd_idle_ttl));
+	   round_jiffies_relative(osdc->client->options->osd_idle_ttl * HZ));
 
 	err = -ENOMEM;
 	osdc->req_mempool = mempool_create_kmalloc_pool(10,

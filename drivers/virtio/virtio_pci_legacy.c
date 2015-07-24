@@ -215,7 +215,6 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 int virtio_pci_legacy_probe(struct virtio_pci_device *vp_dev)
 {
 	struct pci_dev *pci_dev = vp_dev->pci_dev;
-	int rc;
 
 	/* We only own devices >= 0x1000 and <= 0x103f: leave the rest. */
 	if (pci_dev->device < 0x1000 || pci_dev->device > 0x103f)
@@ -227,14 +226,9 @@ int virtio_pci_legacy_probe(struct virtio_pci_device *vp_dev)
 		return -ENODEV;
 	}
 
-	rc = pci_request_region(pci_dev, 0, "virtio-pci-legacy");
-	if (rc)
-		return rc;
-
-	rc = -ENOMEM;
 	vp_dev->ioaddr = pci_iomap(pci_dev, 0, 0);
 	if (!vp_dev->ioaddr)
-		goto err_iomap;
+		return -ENOMEM;
 
 	vp_dev->isr = vp_dev->ioaddr + VIRTIO_PCI_ISR;
 
@@ -252,10 +246,6 @@ int virtio_pci_legacy_probe(struct virtio_pci_device *vp_dev)
 	vp_dev->del_vq = del_vq;
 
 	return 0;
-
-err_iomap:
-	pci_release_region(pci_dev, 0);
-	return rc;
 }
 
 void virtio_pci_legacy_remove(struct virtio_pci_device *vp_dev)
@@ -263,5 +253,4 @@ void virtio_pci_legacy_remove(struct virtio_pci_device *vp_dev)
 	struct pci_dev *pci_dev = vp_dev->pci_dev;
 
 	pci_iounmap(pci_dev, vp_dev->ioaddr);
-	pci_release_region(pci_dev, 0);
 }

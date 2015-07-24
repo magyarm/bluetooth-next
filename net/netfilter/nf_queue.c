@@ -213,7 +213,7 @@ void nf_reinject(struct nf_queue_entry *entry, unsigned int verdict)
 
 	if (verdict == NF_ACCEPT) {
 	next_hook:
-		verdict = nf_iterate(entry->state.hook_list,
+		verdict = nf_iterate(&nf_hooks[entry->state.pf][entry->state.hook],
 				     skb, &entry->state, &elem);
 	}
 

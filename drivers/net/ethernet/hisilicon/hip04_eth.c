@@ -965,6 +965,7 @@ static struct platform_driver hip04_mac_driver = {
 	.remove	= hip04_remove,
 	.driver	= {
 		.name		= DRV_NAME,
+		.owner		= THIS_MODULE,
 		.of_match_table	= hip04_mac_match,
 	},
 };

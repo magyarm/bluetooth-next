@@ -274,10 +274,7 @@ __v7_ca15mp_setup:
 __v7_b15mp_setup:
 __v7_ca17mp_setup:
 	mov	r10, #0
-1:	adr	r12, __v7_setup_stack		@ the local stack
-	stmia	r12, {r0-r5, lr}		@ v7_invalidate_l1 touches r0-r6
-	bl      v7_invalidate_l1
-	ldmia	r12, {r0-r5, lr}
+1:
 #ifdef CONFIG_SMP
 	ALT_SMP(mrc	p15, 0, r0, c1, c0, 1)
 	ALT_UP(mov	r0, #(1 << 6))		@ fake it for UP
@@ -286,7 +283,7 @@ __v7_ca17mp_setup:
 	orreq	r0, r0, r10			@ Enable CPU-specific SMP bits
 	mcreq	p15, 0, r0, c1, c0, 1
 #endif
-	b	__v7_setup_cont
+	b	__v7_setup
 
 /*
  * Errata:
@@ -416,11 +413,10 @@ __v7_pj4b_setup:
 
 __v7_setup:
 	adr	r12, __v7_setup_stack		@ the local stack
-	stmia	r12, {r0-r5, lr}		@ v7_invalidate_l1 touches r0-r6
+	stmia	r12, {r0-r5, r7, r9, r11, lr}
 	bl      v7_invalidate_l1
-	ldmia	r12, {r0-r5, lr}
+	ldmia	r12, {r0-r5, r7, r9, r11, lr}
 
-__v7_setup_cont:
 	and	r0, r9, #0xff000000		@ ARM?
 	teq	r0, #0x41000000
 	bne	__errata_finish
@@ -484,7 +480,7 @@ ENDPROC(__v7_setup)
 
 	.align	2
 __v7_setup_stack:
-	.space	4 * 7				@ 12 registers
+	.space	4 * 11				@ 11 registers
 
 	__INITDATA
 

@@ -69,9 +69,8 @@ void armada_gem_free_object(struct drm_gem_object *obj)
 
 	if (dobj->obj.import_attach) {
 		/* We only ever display imported data */
-		if (dobj->sgt)
-			dma_buf_unmap_attachment(dobj->obj.import_attach,
-						 dobj->sgt, DMA_TO_DEVICE);
+		dma_buf_unmap_attachment(dobj->obj.import_attach, dobj->sgt,
+					 DMA_TO_DEVICE);
 		drm_prime_gem_destroy(&dobj->obj, NULL);
 	}
 

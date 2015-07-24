@@ -636,8 +636,9 @@ int nfs_initiate_pgio(struct rpc_clnt *clnt, struct nfs_pgio_header *hdr,
 
 	hdr->rw_ops->rw_initiate(hdr, &msg, rpc_ops, &task_setup_data, how);
 
-	dprintk("NFS: initiated pgio call "
+	dprintk("NFS: %5u initiated pgio call "
 		"(req %s/%llu, %u bytes @ offset %llu)\n",
+		hdr->task.tk_pid,
 		hdr->inode->i_sb->s_id,
 		(unsigned long long)NFS_FILEID(hdr->inode),
 		hdr->args.count,
@@ -689,6 +690,8 @@ static int nfs_pgio_error(struct nfs_pageio_descriptor *desc,
 static void nfs_pgio_release(void *calldata)
 {
 	struct nfs_pgio_header *hdr = calldata;
+	if (hdr->rw_ops->rw_release)
+		hdr->rw_ops->rw_release(hdr);
 	nfs_pgio_data_destroy(hdr);
 	hdr->completion_ops->completion(hdr);
 }
@@ -708,9 +711,7 @@ static void nfs_pageio_mirror_init(struct nfs_pgio_mirror *mirror,
  * nfs_pageio_init - initialise a page io descriptor
  * @desc: pointer to descriptor
  * @inode: pointer to inode
- * @pg_ops: pointer to pageio operations
- * @compl_ops: pointer to pageio completion operations
- * @rw_ops: pointer to nfs read/write operations
+ * @doio: pointer to io function
  * @bsize: io block size
  * @io_flags: extra parameters for the io function
  */
@@ -1185,7 +1186,6 @@ int nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
  * nfs_pageio_complete_mirror - Complete I/O on the current mirror of an
  *				nfs_pageio_descriptor
  * @desc: pointer to io descriptor
- * @mirror_idx: pointer to mirror index
  */
 static void nfs_pageio_complete_mirror(struct nfs_pageio_descriptor *desc,
 				       u32 mirror_idx)

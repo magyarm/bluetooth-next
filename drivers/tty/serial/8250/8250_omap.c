@@ -22,7 +22,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/console.h>
 #include <linux/pm_qos.h>
-#include <linux/pm_wakeirq.h>
 #include <linux/dma-mapping.h>
 
 #include "8250.h"
@@ -553,6 +552,17 @@ static void omap8250_uart_qos_work(struct work_struct *work)
 	pm_qos_update_request(&priv->pm_qos_request, priv->latency);
 }
 
+static irqreturn_t omap_wake_irq(int irq, void *dev_id)
+{
+	struct uart_port *port = dev_id;
+	int ret;
+
+	ret = port->handle_irq(port);
+	if (ret)
+		return IRQ_HANDLED;
+	return IRQ_NONE;
+}
+
 #ifdef CONFIG_SERIAL_8250_DMA
 static int omap_8250_dma_handle_irq(struct uart_port *port);
 #endif
@@ -586,9 +596,11 @@ static int omap_8250_startup(struct uart_port *port)
 	int ret;
 
 	if (priv->wakeirq) {
-		ret = dev_pm_set_dedicated_wake_irq(port->dev, priv->wakeirq);
+		ret = request_irq(priv->wakeirq, omap_wake_irq,
+				  port->irqflags, "uart wakeup irq", port);
 		if (ret)
 			return ret;
+		disable_irq(priv->wakeirq);
 	}
 
 	pm_runtime_get_sync(port->dev);
@@ -637,7 +649,8 @@ static int omap_8250_startup(struct uart_port *port)
 err:
 	pm_runtime_mark_last_busy(port->dev);
 	pm_runtime_put_autosuspend(port->dev);
-	dev_pm_clear_wake_irq(port->dev);
+	if (priv->wakeirq)
+		free_irq(priv->wakeirq, port);
 	return ret;
 }
 
@@ -669,8 +682,10 @@ static void omap_8250_shutdown(struct uart_port *port)
 
 	pm_runtime_mark_last_busy(port->dev);
 	pm_runtime_put_autosuspend(port->dev);
+
 	free_irq(port->irq, port);
-	dev_pm_clear_wake_irq(port->dev);
+	if (priv->wakeirq)
+		free_irq(priv->wakeirq, port);
 }
 
 static void omap_8250_throttle(struct uart_port *port)
@@ -1211,6 +1226,31 @@ static int omap8250_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+
+static inline void omap8250_enable_wakeirq(struct omap8250_priv *priv,
+					   bool enable)
+{
+	if (!priv->wakeirq)
+		return;
+
+	if (enable)
+		enable_irq(priv->wakeirq);
+	else
+		disable_irq_nosync(priv->wakeirq);
+}
+
+static void omap8250_enable_wakeup(struct omap8250_priv *priv,
+				   bool enable)
+{
+	if (enable == priv->wakeups_enabled)
+		return;
+
+	omap8250_enable_wakeirq(priv, enable);
+	priv->wakeups_enabled = enable;
+}
+#endif
+
 #ifdef CONFIG_PM_SLEEP
 static int omap8250_prepare(struct device *dev)
 {
@@ -1237,12 +1277,20 @@ static int omap8250_suspend(struct device *dev)
 
 	serial8250_suspend_port(priv->line);
 	flush_work(&priv->qos_work);
+
+	if (device_may_wakeup(dev))
+		omap8250_enable_wakeup(priv, true);
+	else
+		omap8250_enable_wakeup(priv, false);
 	return 0;
 }
 
 static int omap8250_resume(struct device *dev)
 {
 	struct omap8250_priv *priv = dev_get_drvdata(dev);
+
+	if (device_may_wakeup(dev))
+		omap8250_enable_wakeup(priv, false);
 
 	serial8250_resume_port(priv->line);
 	return 0;
@@ -1285,6 +1333,7 @@ static int omap8250_runtime_suspend(struct device *dev)
 			return -EBUSY;
 	}
 
+	omap8250_enable_wakeup(priv, true);
 	if (up->dma)
 		omap_8250_rx_dma(up, UART_IIR_RX_TIMEOUT);
 
@@ -1305,6 +1354,7 @@ static int omap8250_runtime_resume(struct device *dev)
 		return 0;
 
 	up = serial8250_get_port(priv->line);
+	omap8250_enable_wakeup(priv, false);
 	loss_cntx = omap8250_lost_context(up);
 
 	if (loss_cntx)

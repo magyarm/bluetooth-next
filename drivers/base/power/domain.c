@@ -6,7 +6,6 @@
  * This file is released under the GPLv2.
  */
 
-#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
@@ -19,8 +18,6 @@
 #include <linux/sched.h>
 #include <linux/suspend.h>
 #include <linux/export.h>
-
-#define GENPD_RETRY_MAX_MS	250		/* Approximate */
 
 #define GENPD_DEV_CALLBACK(genpd, type, callback, dev)		\
 ({								\
@@ -2134,7 +2131,6 @@ EXPORT_SYMBOL_GPL(of_genpd_get_from_provider);
 static void genpd_dev_pm_detach(struct device *dev, bool power_off)
 {
 	struct generic_pm_domain *pd;
-	unsigned int i;
 	int ret = 0;
 
 	pd = pm_genpd_lookup_dev(dev);
@@ -2143,12 +2139,10 @@ static void genpd_dev_pm_detach(struct device *dev, bool power_off)
 
 	dev_dbg(dev, "removing from PM domain %s\n", pd->name);
 
-	for (i = 1; i < GENPD_RETRY_MAX_MS; i <<= 1) {
+	while (1) {
 		ret = pm_genpd_remove_device(pd, dev);
 		if (ret != -EAGAIN)
 			break;
-
-		mdelay(i);
 		cond_resched();
 	}
 
@@ -2189,7 +2183,6 @@ int genpd_dev_pm_attach(struct device *dev)
 {
 	struct of_phandle_args pd_args;
 	struct generic_pm_domain *pd;
-	unsigned int i;
 	int ret;
 
 	if (!dev->of_node)
@@ -2225,12 +2218,10 @@ int genpd_dev_pm_attach(struct device *dev)
 
 	dev_dbg(dev, "adding to PM domain %s\n", pd->name);
 
-	for (i = 1; i < GENPD_RETRY_MAX_MS; i <<= 1) {
+	while (1) {
 		ret = pm_genpd_add_device(pd, dev);
 		if (ret != -EAGAIN)
 			break;
-
-		mdelay(i);
 		cond_resched();
 	}
 
