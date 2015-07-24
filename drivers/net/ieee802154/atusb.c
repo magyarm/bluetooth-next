@@ -21,8 +21,6 @@
  * Copyright (c) 2013 Alexander Aring <alex.aring@gmail.com>
  */
 
-#define DEBUG
-
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -41,6 +39,7 @@
 #define ATUSB_NUM_RX_URBS	4	/* allow for a bit of local latency */
 #define ATUSB_ALLOC_DELAY_MS	100	/* delay after failed allocation */
 #define ATUSB_TX_TIMEOUT_MS	200	/* on the air timeout */
+#define ATUSB_CTRL_MSG_TIMEOUT_MS 2000
 
 struct atusb {
 	struct ieee802154_hw *hw;
@@ -66,8 +65,6 @@ struct atusb {
  * in atusb->err and reject all subsequent requests until the error is cleared.
  */
 
-#define ATUSB_TIMEOUT 2000
-
 static int atusb_control_msg(struct atusb *atusb, unsigned int pipe,
 			     __u8 request, __u8 requesttype,
 			     __u16 value, __u16 index,
@@ -76,11 +73,8 @@ static int atusb_control_msg(struct atusb *atusb, unsigned int pipe,
 	struct usb_device *usb_dev = atusb->usb_dev;
 	int ret;
 
-	if (atusb->err) {
-        dev_err(&usb_dev->dev,
-            "atusb_control_msg: err flag was already set to %d\n", atusb->err);
+	if (atusb->err)
 		return atusb->err;
-	}
 
 	ret = usb_control_msg(usb_dev, pipe, request, requesttype,
 			      value, index, data, size, timeout);
@@ -99,18 +93,18 @@ static int atusb_command(struct atusb *atusb, uint8_t cmd, uint8_t arg)
 
 	dev_dbg(&usb_dev->dev, "atusb_command: cmd = 0x%x\n", cmd);
 	return atusb_control_msg(atusb, usb_sndctrlpipe(usb_dev, 0),
-				 cmd, ATUSB_REQ_TO_DEV, arg, 0, NULL, 0, ATUSB_TIMEOUT);
+				 cmd, ATUSB_REQ_TO_DEV, arg, 0, NULL, 0, ATUSB_CTRL_MSG_TIMEOUT_MS);
 }
 
 static int atusb_write_reg(struct atusb *atusb, uint8_t reg, uint8_t value)
 {
 	struct usb_device *usb_dev = atusb->usb_dev;
 
-//	dev_dbg(&usb_dev->dev, "atusb_write_reg: 0x%02x <- 0x%02x\n",
-//		reg, value);
+	dev_dbg(&usb_dev->dev, "atusb_write_reg: 0x%02x <- 0x%02x\n",
+		reg, value);
 	return atusb_control_msg(atusb, usb_sndctrlpipe(usb_dev, 0),
 				 ATUSB_REG_WRITE, ATUSB_REQ_TO_DEV,
-				 value, reg, NULL, 0, ATUSB_TIMEOUT);
+				 value, reg, NULL, 0, 1000);
 }
 
 static int atusb_read_reg(struct atusb *atusb, uint8_t reg)
@@ -119,12 +113,10 @@ static int atusb_read_reg(struct atusb *atusb, uint8_t reg)
 	int ret;
 	uint8_t value;
 
+	dev_dbg(&usb_dev->dev, "atusb: reg = 0x%x\n", reg);
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_REG_READ, ATUSB_REQ_FROM_DEV,
-				0, reg, &value, 1, ATUSB_TIMEOUT);
-	if ( reg >= 0 ) {
-	    // dev_dbg(&usb_dev->dev, "atusb: reg 0x%x = %x\n", reg, ret);
-	}
+				0, reg, &value, 1, 1000);
 	return ret >= 0 ? value : ret;
 }
 
@@ -135,8 +127,8 @@ static int atusb_write_subreg(struct atusb *atusb, uint8_t reg, uint8_t mask,
 	uint8_t orig, tmp;
 	int ret = 0;
 
-//	dev_dbg(&usb_dev->dev, "atusb_write_subreg: 0x%02x <- 0x%02x\n",
-//		reg, value);
+	dev_dbg(&usb_dev->dev, "atusb_write_subreg: 0x%02x <- 0x%02x\n",
+		reg, value);
 
 	orig = atusb_read_reg(atusb, reg);
 
@@ -372,97 +364,24 @@ static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
 	struct atusb *atusb = hw->priv;
-	struct device *dev = &atusb->usb_dev->dev;
 	int ret;
-
-	channel &= 0x1f;
 
 	/* This implicitly sets the CCA (Clear Channel Assessment) mode to 0,
 	 * "Mode 3a, Carrier sense OR energy above threshold".
 	 * We should probably make this configurable. @@@
 	 */
-    ret = atusb_write_reg(atusb, RG_PHY_CC_CCA, channel);
-    if (ret < 0) {
-        dev_err( dev, "atusb_write_reg failed (%d)\n", ret );
-        return ret;
-    }
-    msleep(1);  /* @@@ ugly synchronization */
-	return ret;
+	ret = atusb_write_reg(atusb, RG_PHY_CC_CCA, channel);
+	if (ret < 0)
+		return ret;
+	msleep(1);	/* @@@ ugly synchronization */
+	return 0;
 }
 
-#define MAX_RSSI 28
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
-    int r;
-
-    int p_dbm;
-    bool retried;
-    struct atusb *atusb = hw->priv;
-    struct device *dev = &atusb->usb_dev->dev;
-
-    BUG_ON(!level);
-
-read_state:
-    r = atusb_read_reg( atusb, RG_TRX_STATUS );
-    if ( r < 0 ) {
-        dev_err( dev, "failed to read reg TRX_STATUS (%d)\n", r );
-        goto out;
-    }
-    r &= 0x1f;
-    if ( STATE_RX_ON != r ) {
-        dev_dbg( dev, "read state %d not STATE_RX_ON (0x%x)\n", r, STATE_RX_ON );
-        if ( retried ) {
-            r = -EALREADY;
-            goto out;
-        }
-        r = atusb_write_reg( atusb, RG_TRX_STATE, STATE_RX_ON );
-        if ( r < 0 ) {
-            dev_err( dev, "failed to write reg TRX_STATE (%d)\n", r );
-            goto out;
-        }
-        for( r = atusb_read_reg( atusb, RG_IRQ_STATUS ); r >= 0 && 0 == ( r & IRQ_PLL_LOCK ); r = atusb_read_reg( atusb, RG_IRQ_STATUS ) ) {
-            msleep( 1 );
-        }
-        if ( r < 0 ) {
-            dev_err( dev, "failed to read reg IRQ_STATUS (%d)\n", r );
-            goto out;
-        }
-        udelay( 150 );
-        retried = true;
-        goto read_state;
-    }
-
-    r = atusb_read_reg( atusb, RG_PHY_RSSI );
-    if ( r < 0 ) {
-        dev_err( dev, "failed to read reg PHY_RSSI (%d)\n", r );
-        goto out;
-    }
-    //dev_dbg( dev, "PHY_RSSI contains value %x\n", 0xff & r );
-    r &= 0x1f;
-    p_dbm = -91 + 3 * ( r - 1 );
-    //dev_dbg( dev, "power in dBm is %d\n", p_dbm );
-    *level = ( r % (MAX_RSSI+1) ) * sizeof(*level)*8/MAX_RSSI;
-    //dev_dbg( dev, "power in [0,256) is @ %p is %u\n", level, *level );
-/*
-    r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
-    if (0xff == r) {
-        r = atusb_write_reg(atusb, RG_PHY_ED_LEVEL, 0x00);
-        if (r < 0) {
-            goto out;
-        }
-        r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
-    }
-    if (r < 0 || r > 0x54) {
-        r = r < 0 ? r : -EINVAL;
-        goto out;
-    }
-    // valid values are [0x00,0x54]
-    // we need to scale to [0x00,0xff]
-    *level = r * 3;
-*/
-    r = 0;
-out:
-	return r;
+	BUG_ON(!level);
+	*level = 0xbe;
+	return 0;
 }
 
 static int atusb_set_hw_addr_filt(struct ieee802154_hw *hw,
@@ -605,7 +524,7 @@ static int atusb_get_and_show_revision(struct atusb *atusb)
 	/* Get a couple of the ATMega Firmware values */
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_ID, ATUSB_REQ_FROM_DEV, 0, 0,
-				buffer, 3, ATUSB_TIMEOUT);
+				buffer, 3, 1000);
 	if (ret >= 0)
 		dev_info(&usb_dev->dev,
 			 "Firmware: major: %u, minor: %u, hardware type: %u\n",
@@ -628,7 +547,7 @@ static int atusb_get_and_show_build(struct atusb *atusb)
 
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_BUILD, ATUSB_REQ_FROM_DEV, 0, 0,
-				build, ATUSB_BUILD_SIZE, ATUSB_TIMEOUT);
+				build, ATUSB_BUILD_SIZE, 1000);
 	if (ret >= 0) {
 		build[ret] = 0;
 		dev_info(&usb_dev->dev, "Firmware: build %s\n", build);
@@ -647,12 +566,8 @@ static int atusb_get_and_show_chip(struct atusb *atusb)
 	part_num = atusb_read_reg(atusb, RG_PART_NUM);
 	version_num = atusb_read_reg(atusb, RG_VERSION_NUM);
 
-	if (atusb->err) {
-        dev_err(&usb_dev->dev,
-            "error flag set to %d\n",
-            atusb->err);
+	if (atusb->err)
 		return atusb->err;
-	}
 
 	if ((man_id_1 << 8 | man_id_0) != ATUSB_JEDEC_ATMEL) {
 		dev_err(&usb_dev->dev,
@@ -746,9 +661,6 @@ static int atusb_probe(struct usb_interface *interface,
 	 * explicitly. Any resets after that will send us straight to TRX_OFF,
 	 * making the command below redundant.
 	 */
-//    atusb_write_reg(atusb, RG_TRX_STATE, STATE_TRX_OFF);
-//    atusb_write_reg(atusb, RG_TRX_STATE, STATE_RX_ON);
-//    atusb_write_reg(atusb, RG_IRQ_MASK, IRQ_PLL_LOCK);
 	atusb_write_reg(atusb, RG_TRX_STATE, STATE_FORCE_TRX_OFF);
 	msleep(1);	/* reset => TRX_OFF, tTR13 = 37 us */
 
