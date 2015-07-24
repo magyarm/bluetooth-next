@@ -32,6 +32,8 @@ static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 static void nl802154_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			       struct genl_info *info);
 
+inline struct workqueue_struct *workqueue_from_ieee_local( struct ieee802154_local *local );
+
 /* the netlink family */
 static struct genl_family nl802154_fam = {
 	.id = GENL_ID_GENERATE,		/* don't bother with a hardcoded ID */
@@ -1177,13 +1179,23 @@ out:
     return;
 }
 
-struct wpan_phy* ieee802154_wpan_phy_from_work( struct work802154 *wrk )
-{
+int nl802154_add_work( struct work802154 *wrk ) {
+
+	bool ret = true;
+	struct wpan_phy *phy;
+	struct ieee802154_local *local;
 	struct genl_info *info;
 	struct cfg802154_registered_device *rdev;
+
 	info = &(wrk->info);
 	rdev = info->user_ptr[0];
-	return &(rdev->wpan_phy);
+
+	phy = &(rdev->wpan_phy);
+	local = wpan_phy_priv( phy );
+
+	ret = queue_work( workqueue_from_ieee_local( local ), &(wrk->work) );
+
+	return ret ? 0 : -1;
 }
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
@@ -1244,7 +1256,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
     INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
 
-    r = ieee802154_add_work( wrk );
+    r = nl802154_add_work( wrk );
     if ( 0 != r ) {
         goto free_wrk;
     }

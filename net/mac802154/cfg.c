@@ -286,20 +286,9 @@ ieee802154_ed_scan_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
-int
-ieee802154_add_work( struct work802154 *wrk ) {
-
-	bool ret = true;
-	struct wpan_phy *phy;
-	struct ieee802154_local *local;
-
-	phy = ieee802154_wpan_phy_from_work( wrk );
-
-	local = wpan_phy_priv( phy );
-
-	ret = queue_work( local->workqueue, &(wrk->work) );
-
-	return ret ? 0 : -1;
+inline struct workqueue_struct *workqueue_from_ieee_local( struct ieee802154_local *local )
+{
+	return local->workqueue;
 }
 
 const struct cfg802154_ops mac802154_config_ops = {
