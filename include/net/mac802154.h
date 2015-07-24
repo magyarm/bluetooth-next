@@ -363,7 +363,6 @@ struct work802154 {
     struct sk_buff *skb;
     struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
     struct wpan_phy *phy;
-    int		(*scan_confirm_send_netlink_msg)( struct mlme_scan_confirm );
     int cmd; // selects which item in the union below to use
     union {
         // put any additional command-specific structs in here
