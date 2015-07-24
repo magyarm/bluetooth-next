@@ -1306,13 +1306,7 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 
     printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 
-    if ( ! (
-   		 info->attrs[ NL802154_BEACON_NOTIFY_PORTID ]
-    ) ) {
-   	 r = -EINVAL;
-   	 goto out;
-    }
-
+    // Just makinga  copy of the whole info struct to use genlmsg_reply()
     ginfo = *info;
 
     // Check to see if we need to set any radio parameters. ( receive mode or what ever ).
