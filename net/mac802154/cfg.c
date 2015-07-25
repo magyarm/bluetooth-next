@@ -286,10 +286,12 @@ ieee802154_ed_scan_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
-inline struct workqueue_struct *workqueue_from_ieee_local( struct ieee802154_local *local )
+// XXX: remove eventually. this is a bit of a hack
+struct workqueue_struct *workqueue_from_ieee_local( struct ieee802154_local *local )
 {
 	return local->workqueue;
 }
+EXPORT_SYMBOL(workqueue_from_ieee_local);
 
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,

@@ -26,6 +26,25 @@
 #include "rdev-ops.h"
 #include "core.h"
 
+struct work802154 {
+    struct sk_buff *skb;
+    struct genl_info info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
+    int cmd; // selects which item in the union below to use
+    union {
+        // put any additional command-specific structs in here
+        // note: only for information that must be conveyed e.g.
+        // between REQ and CNF - not for the entire CNF or IND.
+        // If you can extrapolate information from rdev, wpan_dev,
+        // info, etc, do not duplicated it here.
+        struct ed_scan {
+            u8 channel_page;
+            u32 scan_channels;
+            u8 scan_duration;
+        } ed_scan;
+    } cmd_stuff;
+    struct work_struct work;
+};
+
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info);
 
