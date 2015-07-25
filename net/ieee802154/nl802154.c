@@ -13,8 +13,6 @@
  * Based on: net/wireless/nl80211.c
  */
 
-#define DEBUG
-
 #include <linux/rtnetlink.h>
 
 #include <net/cfg802154.h>

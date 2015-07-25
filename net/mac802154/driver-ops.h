@@ -9,10 +9,6 @@
 #include "ieee802154_i.h"
 #include "trace.h"
 
-#ifndef DEBUG
-#define DEBUG
-#endif
-
 static inline int
 drv_xmit_async(struct ieee802154_local *local, struct sk_buff *skb)
 {
@@ -321,7 +317,7 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
 		return -EOPNOTSUPP;
 	}
 
-	dev_dbg( dev, "page: %u, channels: %x, level: %p, nlevel: %u, duration: %u\n", page, channels, level, nlevel, duration );
+	dev_dbg( dev, "page: %u, channels: %x, level: %p, nlevel: %u, duration: %u\n", page, channels, level, (unsigned)nlevel, duration );
 
     channels &= local->hw.phy->supported.channels[ page ];
 
