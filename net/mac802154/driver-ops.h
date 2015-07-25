@@ -9,6 +9,10 @@
 #include "ieee802154_i.h"
 #include "trace.h"
 
+#ifndef DEBUG
+#define DEBUG
+#endif
+
 static inline int
 drv_xmit_async(struct ieee802154_local *local, struct sk_buff *skb)
 {
@@ -310,11 +314,14 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
 	int i, j;
 	u8 tmp_level;
 	struct timespec now, then;
+	struct device *dev = &local->hw.phy->dev;
 
 	if (!local->ops->ed) {
 		WARN_ON(1);
 		return -EOPNOTSUPP;
 	}
+
+	dev_dbg( dev, "page: %u, channels: %x, level: %p, nlevel: %u, duration: %u\n", page, channels, level, nlevel, duration );
 
     channels &= local->hw.phy->supported.channels[ page ];
 
@@ -322,8 +329,10 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
 
     for( i = 0, j = 0; i < sizeof( channels ) * 8 && j < nlevel; i++ ) {
         if ( BIT( i ) & channels ) {
+            dev_dbg( dev, "scanning channel %u\n", i );
             ret = local->ops->set_channel( &local->hw, page, i );
             if ( 0 != ret ) {
+                dev_err( dev, "failed to set channel %u\n", i );
                 goto out;
             }
             for(
@@ -336,12 +345,14 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
             ) {
                 ret = local->ops->ed( &local->hw, &tmp_level );
                 if ( 0 != ret ) {
+                    dev_err( dev, "failed to scan channel %u\n", i );
                     goto out;
                 }
                 if ( tmp_level >= level[ j ] ) {
                     level[ j ] = tmp_level;
                 }
             }
+            dev_dbg( dev, "channel: %u, level: %u\n", i, level[ j ] );
             j++;
         }
     }
