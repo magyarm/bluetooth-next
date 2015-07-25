@@ -104,7 +104,7 @@ static int atusb_write_reg(struct atusb *atusb, uint8_t reg, uint8_t value)
 		reg, value);
 	return atusb_control_msg(atusb, usb_sndctrlpipe(usb_dev, 0),
 				 ATUSB_REG_WRITE, ATUSB_REQ_TO_DEV,
-				 value, reg, NULL, 0, 1000);
+				 value, reg, NULL, 0, ATUSB_CTRL_MSG_TIMEOUT_MS);
 }
 
 static int atusb_read_reg(struct atusb *atusb, uint8_t reg)
@@ -116,7 +116,7 @@ static int atusb_read_reg(struct atusb *atusb, uint8_t reg)
 	dev_dbg(&usb_dev->dev, "atusb: reg = 0x%x\n", reg);
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_REG_READ, ATUSB_REQ_FROM_DEV,
-				0, reg, &value, 1, 1000);
+				0, reg, &value, 1, ATUSB_CTRL_MSG_TIMEOUT_MS);
 	return ret >= 0 ? value : ret;
 }
 
@@ -524,7 +524,7 @@ static int atusb_get_and_show_revision(struct atusb *atusb)
 	/* Get a couple of the ATMega Firmware values */
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_ID, ATUSB_REQ_FROM_DEV, 0, 0,
-				buffer, 3, 1000);
+				buffer, 3, ATUSB_CTRL_MSG_TIMEOUT_MS);
 	if (ret >= 0)
 		dev_info(&usb_dev->dev,
 			 "Firmware: major: %u, minor: %u, hardware type: %u\n",
@@ -547,7 +547,7 @@ static int atusb_get_and_show_build(struct atusb *atusb)
 
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_BUILD, ATUSB_REQ_FROM_DEV, 0, 0,
-				build, ATUSB_BUILD_SIZE, 1000);
+				build, ATUSB_BUILD_SIZE, ATUSB_CTRL_MSG_TIMEOUT_MS);
 	if (ret >= 0) {
 		build[ret] = 0;
 		dev_info(&usb_dev->dev, "Firmware: build %s\n", build);
