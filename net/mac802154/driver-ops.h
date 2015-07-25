@@ -320,20 +320,15 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
 
     might_sleep();
 
-    printk( KERN_INFO "clearing %u levels at %p\n", (unsigned) nlevel, level );
-    memset( level, 0, nlevel );
-
     for( i = 0, j = 0; i < sizeof( channels ) * 8 && j < nlevel; i++ ) {
         if ( BIT( i ) & channels ) {
-            printk( KERN_INFO "switching to channel %u\n", i );
             ret = local->ops->set_channel( &local->hw, page, i );
             if ( 0 != ret ) {
-                printk( KERN_INFO "failed to set channel %d\n", i );
                 goto out;
             }
-            printk( KERN_INFO "scanning channel %u for %u ns\n", i, (unsigned)duration_ns );
             for(
-                now = current_kernel_time(),
+                level[ j ] = 0,
+                    now = current_kernel_time(),
                     then = now,
                     timespec_add_ns( &then, duration_ns );
                 timespec_compare( &now, &then ) < 0;
@@ -341,16 +336,13 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
             ) {
                 ret = local->ops->ed( &local->hw, &tmp_level );
                 if ( 0 != ret ) {
-                    printk( KERN_INFO "failed to read channel %d\n", i );
                     goto out;
                 }
-                if ( tmp_level > level[ j ] ) {
-                    //printk( KERN_INFO "channel %u: peak %u\n", i, level[ j ] );
+                if ( tmp_level >= level[ j ] ) {
                     level[ j ] = tmp_level;
                 }
             }
             j++;
-            printk( KERN_INFO "read %u from channel %u\n", level[ j ], i );
         }
     }
     ret = 0;
