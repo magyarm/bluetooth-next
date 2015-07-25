@@ -39,6 +39,7 @@
 #define ATUSB_NUM_RX_URBS	4	/* allow for a bit of local latency */
 #define ATUSB_ALLOC_DELAY_MS	100	/* delay after failed allocation */
 #define ATUSB_TX_TIMEOUT_MS	200	/* on the air timeout */
+#define ATUSB_CTRL_MSG_TIMEOUT_MS 2000
 
 struct atusb {
 	struct ieee802154_hw *hw;
@@ -92,7 +93,7 @@ static int atusb_command(struct atusb *atusb, uint8_t cmd, uint8_t arg)
 
 	dev_dbg(&usb_dev->dev, "atusb_command: cmd = 0x%x\n", cmd);
 	return atusb_control_msg(atusb, usb_sndctrlpipe(usb_dev, 0),
-				 cmd, ATUSB_REQ_TO_DEV, arg, 0, NULL, 0, 1000);
+				 cmd, ATUSB_REQ_TO_DEV, arg, 0, NULL, 0, ATUSB_CTRL_MSG_TIMEOUT_MS);
 }
 
 static int atusb_write_reg(struct atusb *atusb, uint8_t reg, uint8_t value)
@@ -103,7 +104,7 @@ static int atusb_write_reg(struct atusb *atusb, uint8_t reg, uint8_t value)
 		reg, value);
 	return atusb_control_msg(atusb, usb_sndctrlpipe(usb_dev, 0),
 				 ATUSB_REG_WRITE, ATUSB_REQ_TO_DEV,
-				 value, reg, NULL, 0, 1000);
+				 value, reg, NULL, 0, ATUSB_CTRL_MSG_TIMEOUT_MS);
 }
 
 static int atusb_read_reg(struct atusb *atusb, uint8_t reg)
@@ -115,7 +116,7 @@ static int atusb_read_reg(struct atusb *atusb, uint8_t reg)
 	dev_dbg(&usb_dev->dev, "atusb: reg = 0x%x\n", reg);
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_REG_READ, ATUSB_REQ_FROM_DEV,
-				0, reg, &value, 1, 1000);
+				0, reg, &value, 1, ATUSB_CTRL_MSG_TIMEOUT_MS);
 	return ret >= 0 ? value : ret;
 }
 
@@ -378,30 +379,9 @@ static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
-    int r;
-
-    struct atusb *atusb = hw->priv;
-    struct device *dev = &atusb->usb_dev->dev;
-
-    BUG_ON(!level);
-    r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
-    if (0xff == r) {
-        r = atusb_write_reg(atusb, RG_PHY_ED_LEVEL, 0x00);
-        if (r < 0) {
-            goto out;
-        }
-        r = atusb_read_reg(atusb, RG_PHY_ED_LEVEL);
-    }
-    if (r < 0 || r > 0x54) {
-        r = r < 0 ? r : -EINVAL;
-        goto out;
-    }
-    // valid values are [0x00,0x54]
-    // we need to scale to [0x00,0xff]
-    *level = r * 3;
-    r = 0;
-out:
-	return r;
+	BUG_ON(!level);
+	*level = 0xbe;
+	return 0;
 }
 
 static int atusb_set_hw_addr_filt(struct ieee802154_hw *hw,
@@ -544,7 +524,7 @@ static int atusb_get_and_show_revision(struct atusb *atusb)
 	/* Get a couple of the ATMega Firmware values */
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_ID, ATUSB_REQ_FROM_DEV, 0, 0,
-				buffer, 3, 1000);
+				buffer, 3, ATUSB_CTRL_MSG_TIMEOUT_MS);
 	if (ret >= 0)
 		dev_info(&usb_dev->dev,
 			 "Firmware: major: %u, minor: %u, hardware type: %u\n",
@@ -567,7 +547,7 @@ static int atusb_get_and_show_build(struct atusb *atusb)
 
 	ret = atusb_control_msg(atusb, usb_rcvctrlpipe(usb_dev, 0),
 				ATUSB_BUILD, ATUSB_REQ_FROM_DEV, 0, 0,
-				build, ATUSB_BUILD_SIZE, 1000);
+				build, ATUSB_BUILD_SIZE, ATUSB_CTRL_MSG_TIMEOUT_MS);
 	if (ret >= 0) {
 		build[ret] = 0;
 		dev_info(&usb_dev->dev, "Firmware: build %s\n", build);

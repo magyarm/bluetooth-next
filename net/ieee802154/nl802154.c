@@ -472,7 +472,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
-	CMD(ed_scan_req, ED_SCAN_REQ);
+	CMD(ed_scan, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1068,12 +1068,12 @@ static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, 
         goto out;
     }
     for( i = 0, j = 0; i <= IEEE802154_MAX_CHANNEL && j <= result_list_size; i++ ) {
-        if ( scan_channels & (1 << i) ) {
-            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ i ] );
+        if ( scan_channels & BIT( i ) ) {
+            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ j ] );
             if ( 0 != r ) {
                 goto nla_put_failure;
             }
-            printk( KERN_INFO "channel %u has value %u\n", i, ed[ i ] );
+            printk( KERN_INFO "channel %u has value %u\n", i, ed[ j ] );
             j++;
         }
     }
@@ -1138,13 +1138,13 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
     scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
 
-    r = rdev_get_ed_scan(rdev, NULL, ed, channel_page, scan_duration );
-    if ( r < 0 ) {
-        goto free_reply;
-    }
-
     for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
         result_list_size += !!( scan_channels & (1 << i) );
+    }
+
+    r = rdev_ed_scan(rdev, NULL, channel_page, scan_channels, ed, result_list_size, scan_duration );
+    if ( r < 0 ) {
+        goto free_reply;
     }
 
     r =
