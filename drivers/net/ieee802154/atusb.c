@@ -384,8 +384,8 @@ static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 
 static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
-	int ret;
 	struct atusb *atusb = hw->priv;
+	int ret;
 
 	/* This implicitly sets the CCA (Clear Channel Assessment) mode to 0,
 	 * "Mode 3a, Carrier sense OR energy above threshold".
