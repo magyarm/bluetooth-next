@@ -145,7 +145,7 @@ static int atusb_write_subreg(struct atusb *atusb, uint8_t reg, uint8_t mask,
 }
 
 static int atusb_read_subreg(struct atusb *atusb, uint8_t reg, uint8_t mask,
-                  uint8_t shift )
+				uint8_t shift )
 {
     struct usb_device *usb_dev = atusb->usb_dev;
     int ret;
@@ -384,7 +384,7 @@ static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 
 static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
-    int ret;
+	int ret;
 	struct atusb *atusb = hw->priv;
 
 	/* This implicitly sets the CCA (Clear Channel Assessment) mode to 0,
@@ -393,33 +393,33 @@ static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 	 */
 	ret = atusb_write_subreg(atusb, SR_CHANNEL, channel);
 	if (ret < 0)
-	    return ret;
-	msleep(1);      /* @@@ ugly synchronization */
+		return ret;
+	msleep(1);	  /* @@@ ugly synchronization */
 	return 0;
 }
 
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
-    struct atusb *atusb = hw->priv;
-    struct usb_device *usb_dev = atusb->usb_dev;
-    int ret;
-    int p;
-    static const unsigned nlevels = 1 << 8 * sizeof( u8 );
-    static const unsigned scale_factor = nlevels / RSSI_MAX_VAL;
-    static const unsigned max_level = scale_factor * RSSI_MAX_VAL;
+	struct atusb *atusb = hw->priv;
+	struct usb_device *usb_dev = atusb->usb_dev;
+	int ret;
+	int p;
+	static const unsigned nlevels = 1 << 8 * sizeof( u8 );
+	static const unsigned scale_factor = nlevels / RSSI_MAX_VAL;
+	static const unsigned max_level = scale_factor * RSSI_MAX_VAL;
 
-    BUG_ON(!level);
+	BUG_ON(!level);
 
-    ret = atusb_read_subreg(atusb, SR_RSSI);
-    if ( ret < 0 ) {
-        goto out;
-    }
-    p = RSSI_BASE_VAL + 3 * ret;
-    ret *= scale_factor;
-    ret = max_level == ret ? nlevels - 1 : ret;
-    *level = ret;
-    dev_vdbg( &usb_dev->dev, "read power level of %d dBm, %u / %u\n", p, *level, nlevels );
-    ret = 0;
+	ret = atusb_read_subreg(atusb, SR_RSSI);
+	if ( ret < 0 ) {
+		goto out;
+	}
+	p = RSSI_BASE_VAL + 3 * ret;
+	ret *= scale_factor;
+	ret = max_level == ret ? nlevels - 1 : ret;
+	*level = ret;
+	dev_vdbg( &usb_dev->dev, "read power level of %d dBm, %u / %u\n", p, *level, nlevels );
+	ret = 0;
 out:
 	return ret;
 }
