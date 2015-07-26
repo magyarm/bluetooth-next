@@ -418,7 +418,7 @@ static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
     ret *= scale_factor;
     ret = max_level == ret ? nlevels - 1 : ret;
     *level = ret;
-    dev_vdbg( &usb_dev->dev, "read power level of %d dBm, %u / %u\n", p, *level, (unsigned) (1 << (sizeof(*level)*8)) );
+    dev_vdbg( &usb_dev->dev, "read power level of %d dBm, %u / %u\n", p, *level, nlevels );
     ret = 0;
 out:
 	return ret;
