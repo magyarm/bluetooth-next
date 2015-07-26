@@ -392,7 +392,10 @@ static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 	 * We should probably make this configurable. @@@
 	 */
 	ret = atusb_write_subreg(atusb, RG_PHY_CC_CCA, 0x1f, 0, channel);
-	return ret;
+	if (ret < 0)
+	    return ret;
+	msleep(1);      /* @@@ ugly synchronization */
+	return 0;
 }
 
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
