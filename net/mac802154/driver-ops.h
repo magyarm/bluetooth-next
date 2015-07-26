@@ -289,28 +289,27 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
 {
 	int ret;
 
-    const u32 a_num_superframe_slots =
-        // 0 to 16, inclusive
-        16;
-    const u32 a_base_slot_duration =
-        // assuming that macBeaconOrder != 15 (i.e. no superframe)
-        60;
-    const u32 a_base_superframe_duration =
-        // 6.4.2, 802.15.4-2011
-        a_base_slot_duration * a_num_superframe_slots;
-    const u32 symbol_duration_us =
-        // 8.1.1, 802.15.4-2011
-        // typically 16 us for 2.4GHz DSS phy
-        local->hw.phy->symbol_duration ? local->hw.phy->symbol_duration : 16;
-    const u64 duration_ns =
-        // 6.2.10.1, 802.15.4-2011
-        a_base_superframe_duration * symbol_duration_us *
-        ( ( 1 << duration)  + 1 ) * 1000;
+	const u32 a_num_superframe_slots =
+		// 0 to 16, inclusive
+		16;
+	const u32 a_base_slot_duration =
+		// assuming that macBeaconOrder != 15 (i.e. no superframe)
+		60;
+	const u32 a_base_superframe_duration =
+		// 6.4.2, 802.15.4-2011
+		a_base_slot_duration * a_num_superframe_slots;
+	const u32 symbol_duration_us =
+		// 8.1.1, 802.15.4-2011
+		// typically 16 us for 2.4GHz DSS phy
+		local->hw.phy->symbol_duration ? local->hw.phy->symbol_duration : 16;
+	const u64 duration_ns =
+		// 6.2.10.1, 802.15.4-2011
+		a_base_superframe_duration * symbol_duration_us *
+		( ( 1 << duration)  + 1 ) * 1000;
 
 	int i, j;
 	u8 tmp_level;
 	struct timespec now, then;
-	struct device *dev = &local->hw.phy->dev;
 
 	if (!local->ops->ed) {
 		WARN_ON(1);
@@ -319,49 +318,42 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
 
 	ret = drv_start( local );
 	if ( ret < 0 ) {
-	    dev_err( dev, "failed to start driver (%d)\n", ret );
-	    goto out;
+		goto out;
 	}
 
-	dev_dbg( dev, "page: %u, channels: %x, level: %p, nlevel: %u, duration: %u\n", page, channels, level, (unsigned)nlevel, duration );
+	channels &= local->hw.phy->supported.channels[ page ];
 
-    channels &= local->hw.phy->supported.channels[ page ];
+	might_sleep();
 
-    might_sleep();
-
-    for( i = 0, j = 0; i < sizeof( channels ) * 8 && j < nlevel; i++ ) {
-        if ( BIT( i ) & channels ) {
-            dev_dbg( dev, "scanning channel %u\n", i );
-            ret = local->ops->set_channel( &local->hw, page, i );
-            if ( 0 != ret ) {
-                dev_err( dev, "failed to set channel %u\n", i );
-                goto out;
-            }
-            for(
-                level[ j ] = 0,
-                    now = current_kernel_time(),
-                    then = now,
-                    timespec_add_ns( &then, duration_ns );
-                timespec_compare( &now, &then ) < 0;
-                now = current_kernel_time()
-            ) {
-                ret = local->ops->ed( &local->hw, &tmp_level );
-                if ( 0 != ret ) {
-                    dev_err( dev, "failed to scan channel %u\n", i );
-                    goto out;
-                }
-                if ( tmp_level >= level[ j ] ) {
-                    level[ j ] = tmp_level;
-                }
-            }
-            dev_dbg( dev, "channel: %u, level: %u\n", i, level[ j ] );
-            j++;
-        }
-    }
-    ret = 0;
+	for( i = 0, j = 0; i < sizeof( channels ) * 8 && j < nlevel; i++ ) {
+		if ( BIT( i ) & channels ) {
+			ret = local->ops->set_channel( &local->hw, page, i );
+			if ( 0 != ret ) {
+				goto out;
+			}
+			for(
+				level[ j ] = 0,
+					now = current_kernel_time(),
+					then = now,
+					timespec_add_ns( &then, duration_ns );
+				timespec_compare( &now, &then ) < 0;
+				now = current_kernel_time()
+			) {
+				ret = local->ops->ed( &local->hw, &tmp_level );
+				if ( 0 != ret ) {
+					goto out;
+				}
+				if ( tmp_level >= level[ j ] ) {
+					level[ j ] = tmp_level;
+				}
+			}
+			j++;
+		}
+	}
+	ret = 0;
 
 out:
-    return ret;
+	return ret;
 }
 
 #endif /* __MAC802154_DRIVER_OPS */
