@@ -317,6 +317,12 @@ drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, si
 		return -EOPNOTSUPP;
 	}
 
+	ret = drv_start( local );
+	if ( ret < 0 ) {
+	    dev_err( dev, "failed to start driver (%d)\n", ret );
+	    goto out;
+	}
+
 	dev_dbg( dev, "page: %u, channels: %x, level: %p, nlevel: %u, duration: %u\n", page, channels, level, (unsigned)nlevel, duration );
 
     channels &= local->hw.phy->supported.channels[ page ];

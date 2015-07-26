@@ -51,6 +51,8 @@
 #define RG_PHY_RSSI	(0x06)
 #define SR_RSSI			0x06, 0x1f, 0
 #define SR_RND_VALUE		0x06, 0x60, 5
+#define RSSI_BASE_VAL (-91)
+#define RSSI_MAX_VAL 28
 #define SR_RX_CRC_VALID		0x06, 0x80, 7
 #define RG_PHY_ED_LEVEL	(0x07)
 #define SR_ED_LEVEL		0x07, 0xff, 0

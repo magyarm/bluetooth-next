@@ -23,9 +23,6 @@
 
 #include <net/cfg802154.h>
 
-// XXX: Once the work802154 structure is removed from this header remove the following include
-#include <net/genetlink.h>
-
 /* General MAC frame format:
  *  2 bytes: Frame Control
  *  1 byte:  Sequence Number

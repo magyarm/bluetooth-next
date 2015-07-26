@@ -144,6 +144,27 @@ static int atusb_write_subreg(struct atusb *atusb, uint8_t reg, uint8_t mask,
 	return ret;
 }
 
+static int atusb_read_subreg(struct atusb *atusb, uint8_t reg, uint8_t mask,
+                  uint8_t shift )
+{
+    struct usb_device *usb_dev = atusb->usb_dev;
+    int ret;
+
+    dev_dbg(&usb_dev->dev, "atusb_read_subreg: 0x%02x\n", reg);
+
+    ret = atusb_read_reg(atusb, reg);
+    if ( ret < 0 ) {
+        dev_err(&usb_dev->dev, "atusb_read_reg failed (%d)\n", ret );
+        goto out;
+    }
+
+    ret >>= shift;
+    ret &= mask;
+
+out:
+    return ret;
+}
+
 static int atusb_get_and_clear_error(struct atusb *atusb)
 {
 	int err = atusb->err;
@@ -363,25 +384,41 @@ static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 
 static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
+    int ret;
 	struct atusb *atusb = hw->priv;
-	int ret;
 
 	/* This implicitly sets the CCA (Clear Channel Assessment) mode to 0,
 	 * "Mode 3a, Carrier sense OR energy above threshold".
 	 * We should probably make this configurable. @@@
 	 */
-	ret = atusb_write_reg(atusb, RG_PHY_CC_CCA, channel);
-	if (ret < 0)
-		return ret;
-	msleep(1);	/* @@@ ugly synchronization */
-	return 0;
+	ret = atusb_write_subreg(atusb, RG_PHY_CC_CCA, 0x1f, 0, channel);
+	return ret;
 }
 
 static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 {
-	BUG_ON(!level);
-	*level = 0xbe;
-	return 0;
+    struct atusb *atusb = hw->priv;
+    struct usb_device *usb_dev = atusb->usb_dev;
+    int ret;
+    int p;
+    static const unsigned nlevels = 1 << 8 * sizeof( u8 );
+    static const unsigned scale_factor = nlevels / RSSI_MAX_VAL;
+    static const unsigned max_level = scale_factor * RSSI_MAX_VAL;
+
+    BUG_ON(!level);
+
+    ret = atusb_read_subreg(atusb, SR_RSSI);
+    if ( ret < 0 ) {
+        goto out;
+    }
+    p = RSSI_BASE_VAL + 3 * ret;
+    ret *= scale_factor;
+    ret = max_level == ret ? nlevels - 1 : ret;
+    *level = ret;
+    dev_vdbg( &usb_dev->dev, "read power level of %d dBm, %u / %u\n", p, *level, (unsigned) (1 << (sizeof(*level)*8)) );
+    ret = 0;
+out:
+	return ret;
 }
 
 static int atusb_set_hw_addr_filt(struct ieee802154_hw *hw,
