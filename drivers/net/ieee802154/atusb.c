@@ -391,7 +391,7 @@ static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 	 * "Mode 3a, Carrier sense OR energy above threshold".
 	 * We should probably make this configurable. @@@
 	 */
-	ret = atusb_write_subreg(atusb, RG_PHY_CC_CCA, 0x1f, 0, channel);
+	ret = atusb_write_subreg(atusb, SR_CHANNEL, channel);
 	if (ret < 0)
 	    return ret;
 	msleep(1);      /* @@@ ugly synchronization */
