@@ -1093,7 +1093,6 @@ static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, 
             if ( 0 != r ) {
                 goto nla_put_failure;
             }
-            printk( KERN_INFO "channel %u has value %u\n", i, ed[ j ] );
             j++;
         }
     }
@@ -1138,12 +1137,10 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     rdev = info->user_ptr[0];
     dev = &rdev->wpan_phy.dev;
 
-    dev_dbg( dev, "allocating reply msg\n" );
-
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
-        dev_err( dev, "unable to allocate reply msg (%d)\n", r );
+        dev_err( dev, "nlmsg_new failed (%d)\n", r );
         goto out;
     }
 
@@ -1165,13 +1162,11 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
         result_list_size += !!( scan_channels & (1 << i) );
     }
 
-    dev_dbg( dev, "beginning scan\n" );
     r = rdev_ed_scan(rdev, NULL, channel_page, scan_channels, ed, result_list_size, scan_duration );
     if ( r < 0 ) {
         dev_err( dev, "rdev_ed_scan failed (%d)\n", r );
         goto free_reply;
     }
-    dev_dbg( dev, "finished scan\n" );
 
     r =
         nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, status ) ||
@@ -1200,7 +1195,7 @@ out:
     return;
 }
 
-int nl802154_add_work( struct work802154 *wrk ) {
+static int nl802154_add_work( struct work802154 *wrk ) {
     int r;
 	r = schedule_work( &wrk->work );
 	return r ? 0 : -EALREADY;
@@ -1238,14 +1233,12 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
 
     if ( channel_page > IEEE802154_MAX_PAGE ) {
-        // XXX: printk's need to be changed to dev_err - which dev??
         dev_err( dev, "invalid channel_page %u\n", channel_page );
         r = -EINVAL;
         goto out;
     }
 
     if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-        // XXX: printk's need to be changed to dev_err - which dev??
         dev_err( dev, "invalid scan_channels %u\n", scan_channels );
         r = -EINVAL;
         goto out;
@@ -1254,7 +1247,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
     if ( NULL == wrk ) {
         r = -ENOMEM;
-        dev_err( dev, "unable to allocate work (%d)\n", r );
         goto out;
     }
 
@@ -1264,14 +1256,12 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     wrk->cmd_stuff.ed_scan.channel_page = channel_page;
     wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
-    dev_dbg( dev, "initializing completion\n" );
+
     init_completion( &wrk->completion );
-    dev_dbg( dev, "initializing work\n" );
     INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
-    dev_dbg( dev, "adding work\n" );
     r = nl802154_add_work( wrk );
     if ( 0 != r ) {
-        dev_err( dev, "unable to schedule work (%d)\n", r );
+        dev_err( dev, "nl802154_add_work failed (%d)\n", r );
         goto free_wrk;
     }
 
