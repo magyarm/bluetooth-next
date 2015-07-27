@@ -14,6 +14,7 @@
  */
 
 #include <linux/rtnetlink.h>
+#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
@@ -1195,10 +1196,43 @@ out:
     return;
 }
 
-static int nl802154_add_work( struct work802154 *wrk ) {
-    int r;
-	r = schedule_work( &wrk->work );
-	return r ? 0 : -EALREADY;
+int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify )
+{
+	int ret = 0;
+	struct sk_buff *notification;
+	void *hdr;
+
+	printk( KERN_INFO "In nl802154_beacon_notify_indication");
+	printk( KERN_INFO "PortID we are sending to is: %d", ginfo.snd_portid );
+
+	notification = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == notification ) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	hdr = nl802154hdr_put( notification, ginfo.snd_portid, ginfo.snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	if ( NULL == hdr ) {
+		ret = -ENOBUFS;
+		goto free_reply;
+	}
+
+	ret = nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn );
+
+	if ( 0 != ret ) {
+		goto nla_put_failure;
+	}
+
+	genlmsg_end( notification, hdr );
+
+	ret = genlmsg_reply(notification, &ginfo);
+
+nla_put_failure:
+free_reply:
+	nlmsg_free( notification );
+
+out:
+	return ret;
 }
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
@@ -1274,6 +1308,32 @@ free_wrk:
     kfree( wrk );
 
 out:
+    return r;
+}
+
+static int nl802154_add_work( struct work802154 *wrk ) {
+    int r;
+	r = schedule_work( &wrk->work );
+	return r ? 0 : -EALREADY;
+}
+
+static int nl802154_set_beacon_indication( struct sk_buff *skb, struct netlink_callback *cb )
+{
+	int r = 0;
+
+	struct cfg802154_registered_device *rdev;
+
+    rdev = info->user_ptr[0];
+
+    printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+    // Just makinga  copy of the whole info struct to use genlmsg_reply()
+    ginfo = *info;
+
+    // Explicitely turn the radio on
+    r = rdev_set_beacon_notify_listener(rdev, NULL );
+
+
     return r;
 }
 

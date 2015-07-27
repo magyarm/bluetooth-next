@@ -286,6 +286,15 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
+static int
+ieee802154_set_beacon_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	ret = drv_start( local );
+	return ret;
+}
+
 int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify )
 {
 	int ret;
@@ -311,4 +320,5 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
+	.set_beacon_listener = ieee802154_set_beacon_listener,
 };

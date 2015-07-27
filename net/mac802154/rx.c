@@ -105,6 +105,8 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hd
 
     ind.bsn = hdr->seq;
 
+    printk( KERN_INFO "Beacon Sequence Number received: %x", ind.bsn );
+
 	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
 	 * where it can be accessed via netlink
 	 */
@@ -121,7 +123,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	__le16 span, sshort;
 	int rc;
 
-	pr_debug("getting packet via slave interface %s\n", sdata->dev->name);
+	dev_err( &(wpan_dev->netdev->dev), "getting packet via slave interface %s\n", sdata->dev->name);
+
+	printk( KERN_INFO "Frame Type received (type = %d)\n", mac_cb(skb)->type);
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -174,8 +178,10 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
+		printk( KERN_INFO "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
+		printk( KERN_INFO "Received Beacon Frame Control");
 		return ieee802154_deliver_bcn(skb, hdr);
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",

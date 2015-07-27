@@ -205,4 +205,15 @@ rdev_ed_scan(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev
 	return ret;
 }
 
+static inline int
+rdev_set_beacon_notify_listener(struct cfg802154_registered_device *rdev,
+		  struct wpan_dev *wpan_dev )
+{
+	int ret = 0;
+
+	ret = rdev->ops->set_beacon_listener(&rdev->wpan_phy, wpan_dev );
+
+	return ret;
+}
+
 #endif /* __CFG802154_RDEV_OPS */
