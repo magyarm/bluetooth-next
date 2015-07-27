@@ -285,32 +285,30 @@ drv_set_promiscuous_mode(struct ieee802154_local *local, bool on)
 }
 
 static inline int
-drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
+drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, size_t nlevel, u8 duration)
 {
 	int ret;
 
-    const u32 a_num_superframe_slots =
-        // 0 to 16, inclusive
-        16;
-    const u32 a_base_slot_duration =
-        // assuming that macBeaconOrder != 15 (i.e. no superframe)
-        60;
-    const u32 a_base_superframe_duration =
-        // 6.4.2, 802.15.4-2011
-        a_base_slot_duration * a_num_superframe_slots;
-    const u32 symbol_duration_us =
-        // 8.1.1, 802.15.4-2011
-        // typically 16 us for 2.4GHz DSS phy
-        local->hw.phy->symbol_duration;
-    const u64 duration_ns =
-        // 6.2.10.1, 802.15.4-2011
-        a_base_superframe_duration * symbol_duration_us *
-        ( ( 1 << duration)  + 1 ) * 1000;
+	const u32 a_num_superframe_slots =
+		// 0 to 16, inclusive
+		16;
+	const u32 a_base_slot_duration =
+		// assuming that macBeaconOrder != 15 (i.e. no superframe)
+		60;
+	const u32 a_base_superframe_duration =
+		// 6.4.2, 802.15.4-2011
+		a_base_slot_duration * a_num_superframe_slots;
+	const u32 symbol_duration_us =
+		// 8.1.1, 802.15.4-2011
+		// typically 16 us for 2.4GHz DSS phy
+		local->hw.phy->symbol_duration ? local->hw.phy->symbol_duration : 16;
+	const u64 duration_ns =
+		// 6.2.10.1, 802.15.4-2011
+		a_base_superframe_duration * symbol_duration_us *
+		( ( 1 << duration)  + 1 ) * 1000;
 
-	int i;
-	u32 channels;
+	int i, j;
 	u8 tmp_level;
-	u8 nchannels;
 	struct timespec now, then;
 
 	if (!local->ops->ed) {
@@ -318,51 +316,44 @@ drv_ed_scan(struct ieee802154_local *local, u8 *level, u8 page, u8 duration)
 		return -EOPNOTSUPP;
 	}
 
-    channels = local->hw.phy->supported.channels[ page ];
+	ret = drv_start( local );
+	if ( ret < 0 ) {
+		goto out;
+	}
 
-    might_sleep();
+	channels &= local->hw.phy->supported.channels[ page ];
 
-    for( i = 0, nchannels = 0; i < sizeof( channels ) * 8; i++ ) {
-        if ( BIT( i ) & channels ) {
-            nchannels++;
-        }
-    }
+	might_sleep();
 
-    memset( level, 0, nchannels );
-
-    for( i = 0; i < sizeof( channels ) * 8; i++ ) {
-        if ( BIT( i ) & channels ) {
-            printk( KERN_INFO "switching to channel %u\n", i );
-            ret = local->ops->set_channel( &local->hw, page, i );
-            if ( 0 != ret ) {
-                printk( KERN_INFO "failed to set channel %d\n", i );
-                goto out;
-            }
-            printk( KERN_INFO "reading channel %u\n", i );
-            for(
-                now = current_kernel_time(),
-                    then = now,
-                    timespec_add_ns( &then, duration_ns );
-                timespec_compare( &now, &then ) < 0;
-                now = current_kernel_time()
-            ) {
-                ret = local->ops->ed( &local->hw, &tmp_level );
-                if ( 0 != ret ) {
-                    printk( KERN_INFO "failed to read channel %d\n", i );
-                    goto out;
-                }
-                if ( tmp_level > level[ i ] ) {
-                    printk( KERN_INFO "channel %u: peak %u\n", i, level[ i ] );
-                    level[ i ] = tmp_level;
-                }
-            }
-            printk( KERN_INFO "read channel %u\n", i );
-        }
-    }
-    ret = 0;
+	for( i = 0, j = 0; i < sizeof( channels ) * 8 && j < nlevel; i++ ) {
+		if ( BIT( i ) & channels ) {
+			ret = local->ops->set_channel( &local->hw, page, i );
+			if ( 0 != ret ) {
+				goto out;
+			}
+			for(
+				level[ j ] = 0,
+					now = current_kernel_time(),
+					then = now,
+					timespec_add_ns( &then, duration_ns );
+				timespec_compare( &now, &then ) < 0;
+				now = current_kernel_time()
+			) {
+				ret = local->ops->ed( &local->hw, &tmp_level );
+				if ( 0 != ret ) {
+					goto out;
+				}
+				if ( tmp_level >= level[ j ] ) {
+					level[ j ] = tmp_level;
+				}
+			}
+			j++;
+		}
+	}
+	ret = 0;
 
 out:
-    return ret;
+	return ret;
 }
 
 #endif /* __MAC802154_DRIVER_OPS */

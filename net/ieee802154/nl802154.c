@@ -14,7 +14,6 @@
  */
 
 #include <linux/rtnetlink.h>
-#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
@@ -27,13 +26,31 @@
 #include "rdev-ops.h"
 #include "core.h"
 
+struct work802154 {
+    struct sk_buff *skb;
+    struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
+    int cmd; // selects which item in the union below to use
+    union {
+        // put any additional command-specific structs in here
+        // note: only for information that must be conveyed e.g.
+        // between REQ and CNF - not for the entire CNF or IND.
+        // If you can extrapolate information from rdev, wpan_dev,
+        // info, etc, do not duplicated it here.
+        struct ed_scan {
+            u8 channel_page;
+            u32 scan_channels;
+            u8 scan_duration;
+        } ed_scan;
+    } cmd_stuff;
+    struct completion completion;
+    struct work_struct work;
+};
+
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info);
 
 static void nl802154_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			       struct genl_info *info);
-
-static struct genl_info ginfo;
 
 /* the netlink family */
 static struct genl_family nl802154_fam = {
@@ -247,15 +264,6 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
     [NL802154_ATTR_SEC_KEY_SOURCE] = { .type = NLA_NESTED, },
     [NL802154_ATTR_SEC_KEY_SOURCE_ENTRY] = { .type = NLA_U8, },
     [NL802154_ATTR_SEC_KEY_INDEX] = { .type = NLA_U8, },
-
-	[NL802154_ATTR_BEACON_SEQUENCE_NUMBER] = { .type = NLA_U8, },
-	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
-	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
-	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
-	[NL802154_SDU_LENGTH] = { .type = NLA_U32 },
-	[NL802154_SDU] = { .type = NLA_NESTED },
-
-	[NL802154_BEACON_NOTIFY_PORTID] = { .type = NLA_U32 },
 };
 
 /* message building helper */
@@ -484,7 +492,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
-	CMD(get_ed_scan, ED_SCAN_REQ);
+	CMD(ed_scan, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1080,12 +1088,11 @@ static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, 
         goto out;
     }
     for( i = 0, j = 0; i <= IEEE802154_MAX_CHANNEL && j <= result_list_size; i++ ) {
-        if ( scan_channels & (1 << i) ) {
-            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ i ] );
+        if ( scan_channels & BIT( i ) ) {
+            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ j ] );
             if ( 0 != r ) {
                 goto nla_put_failure;
             }
-            printk( KERN_INFO "channel %u has value %u\n", i, ed[ i ] );
             j++;
         }
     }
@@ -1110,7 +1117,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     struct sk_buff *skb;
     struct genl_info *info;
     struct cfg802154_registered_device *rdev;
-    struct wpan_dev *wpan_dev;
+    struct device *dev;
 
     int i;
 
@@ -1128,11 +1135,12 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     skb = wrk->skb;
     info = wrk->info;
     rdev = info->user_ptr[0];
-    wpan_dev = info->user_ptr[1];
+    dev = &rdev->wpan_phy.dev;
 
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
+        dev_err( dev, "nlmsg_new failed (%d)\n", r );
         goto out;
     }
 
@@ -1150,13 +1158,14 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
     scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
 
-    r = rdev_get_ed_scan(rdev, NULL, ed, channel_page, scan_duration );
-    if ( r < 0 ) {
-        goto free_reply;
-    }
-
     for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
         result_list_size += !!( scan_channels & (1 << i) );
+    }
+
+    r = rdev_ed_scan(rdev, NULL, channel_page, scan_channels, ed, result_list_size, scan_duration );
+    if ( r < 0 ) {
+        dev_err( dev, "rdev_ed_scan failed (%d)\n", r );
+        goto free_reply;
     }
 
     r =
@@ -1168,6 +1177,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
         nl802154_ed_scan_put_ed( reply, result_list_size, scan_channels, ed ) ||
         nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, detected_category );
     if ( 0 != r ) {
+        dev_err( dev, "nla_put_failure (%d)\n", r );
         goto nla_put_failure;
     }
 
@@ -1180,46 +1190,15 @@ nla_put_failure:
 free_reply:
     nlmsg_free( reply );
 out:
+    complete( &wrk->completion );
     kfree( wrk );
     return;
 }
 
-int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify )
-{
-	int ret = 0;
-	struct sk_buff *notification;
-	void *hdr;
-
-	printk( KERN_INFO "In nl803154_beacon_notify_indication");
-
-	notification = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-	if ( NULL == notification ) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	hdr = nl802154hdr_put( notification, ginfo.snd_portid, ginfo.snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
-	if ( NULL == hdr ) {
-		ret = -ENOBUFS;
-		goto free_reply;
-	}
-
-	ret = nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn );
-
-	if ( 0 != ret ) {
-		goto nla_put_failure;
-	}
-
-	genlmsg_end( notification, hdr );
-
-	ret = genlmsg_reply(notification, &ginfo);
-
-nla_put_failure:
-free_reply:
-	nlmsg_free( notification );
-
-out:
-	return ret;
+static int nl802154_add_work( struct work802154 *wrk ) {
+    int r;
+	r = schedule_work( &wrk->work );
+	return r ? 0 : -EALREADY;
 }
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
@@ -1232,10 +1211,11 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     u8 channel_page;
 
 	struct cfg802154_registered_device *rdev;
-
 	struct work802154 *wrk;
+	struct device *dev;
 
     rdev = info->user_ptr[0];
+    dev = &rdev->wpan_phy.dev;
 
     if ( ! (
         info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1253,15 +1233,13 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
 
     if ( channel_page > IEEE802154_MAX_PAGE ) {
-        // XXX: printk's need to be changed to dev_err - which dev??
-        printk( KERN_INFO "invalid channel_page %u\n", channel_page );
+        dev_err( dev, "invalid channel_page %u\n", channel_page );
         r = -EINVAL;
         goto out;
     }
 
     if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-        // XXX: printk's need to be changed to dev_err - which dev??
-        printk( KERN_INFO "invalid scan_channels %u\n", scan_channels );
+        dev_err( dev, "invalid scan_channels %u\n", scan_channels );
         r = -EINVAL;
         goto out;
     }
@@ -1271,45 +1249,29 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
         r = -ENOMEM;
         goto out;
     }
+
     wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
     wrk->skb = skb;
     wrk->info = info;
     wrk->cmd_stuff.ed_scan.channel_page = channel_page;
     wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
-    INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
 
-    r = ieee802154_add_work( wrk );
+    init_completion( &wrk->completion );
+    INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+    r = nl802154_add_work( wrk );
     if ( 0 != r ) {
+        dev_err( dev, "nl802154_add_work failed (%d)\n", r );
         goto free_wrk;
     }
+
+    wait_for_completion( &wrk->completion );
 
     r = 0;
     goto out;
 
 free_wrk:
     kfree( wrk );
-
-out:
-    return r;
-}
-
-static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
-{
-	int r = 0;
-
-	struct cfg802154_registered_device *rdev;
-
-	printk( KERN_INFO "In nl802154_set_beacon_indication");
-
-    rdev = info->user_ptr[0];
-
-    printk(KERN_INFO "Inside %s\n", __FUNCTION__);
-
-    // Just makinga  copy of the whole info struct to use genlmsg_reply()
-    ginfo = *info;
-
-    // Check to see if we need to set any radio parameters. ( receive mode or what ever ).
 
 out:
     return r;
@@ -1524,14 +1486,6 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_ED_SCAN_REQ,
 		.doit = nl802154_ed_scan_req,
-		.policy = nl802154_policy,
-		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
-				  NL802154_FLAG_NEED_RTNL,
-	},
-	{
-		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
-		.doit = nl802154_set_beacon_indication,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
