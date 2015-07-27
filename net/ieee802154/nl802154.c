@@ -1366,6 +1366,8 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 		goto out;
 	}
 
+	wrk->info = info;
+
 	init_completion( &wrk->completion );
 	INIT_WORK( &wrk->work, nl802154_beacon_work );
 	//schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
