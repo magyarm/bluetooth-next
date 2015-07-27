@@ -34,13 +34,14 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	pr_debug("received beacon packet via interface %s\n", sdata->dev->name);
+	pr_debug("received beacon packet via interface %s\n", skb->dev->name);
 
 	return netif_receive_skb(skb);
 }
 
-static int ieee802154_deliver_bcn(struct sk_buff *skb, struct iee802154_hdr *hdr)
+static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct genl_info *info)
 {
+	int ret = 0;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
@@ -104,10 +105,14 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, struct iee802154_hdr *hdr
 
     ind.bsn = hdr->seq;
 
+    printk( KERN_INFO "Beacon Sequence Number received: %x", ind.bsn );
+
 	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
 	 * where it can be accessed via netlink
 	 */
-	cfg802154_inform_beacon(&ind);
+	ret = cfg802154_inform_beacon(&ind, info);
+
+	return ret;
 }
 
 static int
@@ -118,7 +123,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	__le16 span, sshort;
 	int rc;
 
-	pr_debug("getting packet via slave interface %s\n", sdata->dev->name);
+	dev_err( &(wpan_dev->netdev->dev), "getting packet via slave interface %s\n", sdata->dev->name);
+
+	printk( KERN_INFO "Frame Type received (type = %d)\n", mac_cb(skb)->type);
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -171,9 +178,14 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
+		printk( KERN_INFO "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
-		return ieee802154_deliver_bcn(skb, hdr);
+		if( sdata->local->beacon_listener ) {
+			printk( KERN_INFO "Received Beacon Frame Control");
+			return ieee802154_deliver_bcn(skb, hdr, sdata->local->beacon_listener);
+		}
+		break;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);

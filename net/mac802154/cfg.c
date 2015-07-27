@@ -273,23 +273,38 @@ ieee802154_set_lbt_mode(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_get_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-			u8 *level, u8 page, u8 duration)
+ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+            u8 page, u32 channels, u8 *level, size_t nlevel, u8 duration)
 {
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	int ret = 0;
 
 	ASSERT_RTNL();
 
-	drv_ed_scan( local, level, page, duration );
+	ret = drv_ed_scan( local, page, channels, level, nlevel, duration );
 
 	return ret;
 }
 
-int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify )
+static int
+ieee802154_register_beacon_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	ret = drv_start( local );
+	return ret;
+}
+
+static int
+ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
+{
+
+}
+
+int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
 {
 	int ret;
-	ret = nl802154_beacon_notify_indication( beacon_notify );
+	ret = nl802154_beacon_notify_indication( beacon_notify, info );
 	return ret;
 }
 
@@ -310,5 +325,7 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_csma_backoffs = ieee802154_set_max_csma_backoffs,
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
-	.get_ed_scan = ieee802154_get_ed_scan,
+	.ed_scan = ieee802154_ed_scan,
+	.register_beacon_listener = ieee802154_register_beacon_listener,
+	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
 };
