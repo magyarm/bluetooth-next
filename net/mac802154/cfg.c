@@ -299,7 +299,10 @@ ieee802154_register_beacon_listener(struct wpan_phy *wpan_phy, struct wpan_dev *
 static int
 ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
 {
-
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->beacon_listener = NULL;
+	return ret;
 }
 
 int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
