@@ -352,7 +352,7 @@ static int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata,
 	return 0;
 }
 
-static int mac802154_header_create(struct sk_buff *skb,
+int mac802154_header_create(struct sk_buff *skb,
 				   struct net_device *dev,
 				   unsigned short type,
 				   const void *daddr,

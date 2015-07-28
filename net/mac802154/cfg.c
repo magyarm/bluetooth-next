@@ -20,6 +20,8 @@
 #include "driver-ops.h"
 #include "cfg.h"
 
+int mac802154_header_create(struct sk_buff *skb, struct net_device *dev, unsigned short type, const void *daddr, const void *saddr, unsigned len);
+
 static struct net_device *
 ieee802154_add_iface_deprecated(struct wpan_phy *wpan_phy,
 				const char *name,
@@ -323,8 +325,11 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 8; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
 
+	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d", hlen, tlen, size);
+	printk( KERN_INFO "Address of the netdev device structure: %x", wpan_dev->netdev );
+
 	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
-	if (!skb || r<0){
+	if (!skb){
 		goto error;
 	}
 
@@ -340,20 +345,24 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	src_addr.mode = IEEE802154_ADDR_NONE;
 	dst_addr.mode = IEEE802154_ADDR_SHORT;
 	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
-	dst_addr.short_addr = IEEE802154_ADDR_BROADCAST;
+	dst_addr.short_addr = 0xbeef;
 
 	cb->secen = false;
 
 	cb->source = src_addr;
 	cb->dest = dst_addr;
 
-	r = dev_hard_header(skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr,
-			      &src_addr, size);
+//	r = dev_hard_header(skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr,
+//			      &src_addr, size);
+	printk( KERN_INFO "Address of the wpan_dev structure in netdevice: %x", wpan_dev->netdev->ieee802154_ptr );
+	printk( KERN_INFO "DSN value in wpan_dev: %x", wpan_dev->netdev->ieee802154_ptr->dsn );
+	r = mac802154_header_create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+
 
 	skb->dev = wpan_dev->netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	r = drv_xmit_async( local, skb );
+//	r = drv_xmit_async( local, skb );
 
 error:
 	kfree_skb(skb);

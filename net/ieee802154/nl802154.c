@@ -1276,11 +1276,14 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
          	  //Set the phy channel to the first channel.
          	  r = rdev_set_channel(rdev, channel_page, i);
 
-         	  //Send the beacon request
-         	  r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+         	  while( 1 ) {
+         		  //Send the beacon request
+         		  r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
 
-         	  //Wait scan_duration milliseconds for beacons to come in
-         	  msleep( scan_duration * 1000 );
+         		  //Wait scan_duration milliseconds for beacons to come in
+         		  msleep( scan_duration * 1000 );
+         		  printk( KERN_INFO "While(1) around beacon send \n");
+         	  }
            }
        }
    rdev_beacon_deregister_listener( rdev );
