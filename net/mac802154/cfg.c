@@ -305,6 +305,61 @@ ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
 	return ret;
 }
 
+static int
+ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id, struct genl_info *info )
+{
+	int r = 0;
+	struct sk_buff skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, src_addr;
+
+	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
+	local->beacon_listener = info;
+
+	//Create beacon frame / payload
+	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 8; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb || r<0){
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = false;
+
+
+	src_addr.mode = IEEE802154_ADDR_NONE;
+	dst_addr.mode = IEEE802154_ADDR_SHORT;
+	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	dst_addr.short_addr = IEEE802154_ADDR_BROADCAST;
+
+	cb->secen = false;
+
+	cb->source = src_addr;
+	cb->dest = dst_addr;
+
+	r = dev_hard_header(skb, dev, ETH_P_IEEE802154, &dst_addr,
+			      &src_addr, size);
+
+	skb->dev = wpan_phy->dev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	r = drv_xmit_async( local, skb );
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
+}
+
 int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
 {
 	int ret;
@@ -332,4 +387,5 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.ed_scan = ieee802154_ed_scan,
 	.register_beacon_listener = ieee802154_register_beacon_listener,
 	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
+	.send_beacon_command_frame = ieee802154_send_beacon_command_frame,
 };

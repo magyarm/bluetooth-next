@@ -68,6 +68,7 @@ struct cfg802154_ops {
 				u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 	int (*register_beacon_listener)( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info );
 	int (*deregister_beacon_listener)( struct wpan_phy *wpan_phy );
+	int (*send_beacon_command_frame)( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id, struct genl_info *info );
 };
 
 static inline bool

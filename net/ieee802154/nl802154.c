@@ -1209,6 +1209,85 @@ out:
     return;
 }
 
+static void nl802154_active_scan_cnf( struct work_struct *work )
+{
+   int r;
+
+   struct work802154 *wrk;
+   struct sk_buff *skb;
+   struct genl_info *info;
+   struct cfg802154_registered_device *rdev;
+   struct device *dev;
+   struct wpan_dev *wpan_dev;
+
+   int i;
+
+   u8 status;
+   u8 scan_type;
+   u8 channel_page;
+   u32 scan_channels;
+   u8 scan_duration;
+   __le32 unscanned_channels;
+   u8 result_list_size;
+   u8 detected_category;
+   struct sk_buff *reply;
+   void *hdr;
+
+   wrk = container_of( work, struct work802154, work );
+   skb = wrk->skb;
+   info = wrk->info;
+   rdev = info->user_ptr[0];
+   dev = &rdev->wpan_phy.dev;
+   wpan_dev = dev->ieee802154_ptr;
+
+   reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+   if ( NULL == reply ) {
+       r = -ENOMEM;
+       dev_err( dev, "nlmsg_new failed (%d)\n", r );
+       goto out;
+   }
+
+   hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
+   if ( NULL == hdr ) {
+       r = -ENOBUFS;
+       goto free_reply;
+   }
+
+   status = IEEE802154_SUCCESS;
+
+   //Check the channel mask for which channels we want to do
+   scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
+   scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
+
+   //Need to send the first part of the MLME-SCAN.confirm ( status, ScanType, ChannelPage ) here
+   //The beacon indication mechanism will send the heard beacons as they arrive in the RX path
+   //We don't send any beacons back in this or later functions. Just hold the socket open until
+   //all channels have been scanned.
+
+
+   for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
+           result_list_size += !!( scan_channels & (1 << i) );
+           if( scan_channels & (1 << i) ) {
+         	  //Set the phy channel to the first channel.
+         	  r = rdev_set_channel(rdev, page, channel);
+
+         	  //Send the beacon request
+         	  r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ, info );
+
+         	  //Wait scan_duration milliseconds for beacons to come in
+         	  msleep( scan_duration * 1000 );
+           }
+       }
+
+nla_put_failure:
+free_reply:
+	nlmsg_free( reply );
+out:
+   complete( &wrk->completion );
+   kfree( wrk );
+   return;
+}
+
 static void nl802154_beacon_work( struct work_struct *work ) {
 
 	struct work802154 *wrk;
@@ -1327,15 +1406,23 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
         goto out;
     }
 
-    wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+
     wrk->skb = skb;
     wrk->info = info;
     wrk->cmd_stuff.ed_scan.channel_page = channel_page;
     wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
 
+    if( IEEE802154_MAC_SCAN_ED = scan_type ) {
+   	 wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+   	 INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+    } else if( IEEE802154_MAC_SCAN_ACTIVE = scan_type ) {
+   	 wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
+   	 INIT_WORK( &wrk->work, nl802154_active_scan_cnf );
+    }
+
     init_completion( &wrk->completion );
-    INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+
     r = nl802154_add_work( wrk );
     if ( 0 != r ) {
         dev_err( dev, "nl802154_add_work failed (%d)\n", r );
