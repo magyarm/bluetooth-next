@@ -306,7 +306,7 @@ ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
 }
 
 static int
-ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id, struct genl_info *info )
+ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id )
 {
 	int r = 0;
 	struct sk_buff *skb;
@@ -314,8 +314,9 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	int hlen, tlen, size;
 	struct ieee802154_addr dst_addr, src_addr;
 
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
 	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
-	local->beacon_listener = info;
 
 	//Create beacon frame / payload
 	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);

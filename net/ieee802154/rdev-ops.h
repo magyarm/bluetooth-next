@@ -228,11 +228,11 @@ rdev_beacon_deregister_listener(struct cfg802154_registered_device *rdev )
 
 static inline int
 rdev_send_beacon_command_frame( struct cfg802154_registered_device *rdev,
-			struct wpan_dev *wpan_dev, u8 cmd_frame_id, struct genl_info *info)
+			struct wpan_dev *wpan_dev, u8 cmd_frame_id )
 {
 	int r = 0;
 
-	r = rdev->ops->send_beacon_command_frame( &rdev->wpan_phy, wpan_dev, cmd_frame_id, info );
+	r = rdev->ops->send_beacon_command_frame( &rdev->wpan_phy, wpan_dev, cmd_frame_id );
 
 	return r;
 }

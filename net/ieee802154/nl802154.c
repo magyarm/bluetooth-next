@@ -1713,6 +1713,14 @@ static const struct genl_ops nl802154_ops[] = {
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
+	{
+		.cmd = NL802154_CMD_ACTIVE_SCAN_REQ,
+		.doit = nl802154_ed_scan_req,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+				NL802154_FLAG_NEED_RTNL,
+	},
 };
 
 /* initialisation/exit functions */
