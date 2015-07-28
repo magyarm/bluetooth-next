@@ -309,7 +309,7 @@ static int
 ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id, struct genl_info *info )
 {
 	int r = 0;
-	struct sk_buff skb;
+	struct sk_buff *skb;
 	struct ieee802154_mac_cb *cb;
 	int hlen, tlen, size;
 	struct ieee802154_addr dst_addr, src_addr;
@@ -346,10 +346,10 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	cb->source = src_addr;
 	cb->dest = dst_addr;
 
-	r = dev_hard_header(skb, dev, ETH_P_IEEE802154, &dst_addr,
+	r = dev_hard_header(skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr,
 			      &src_addr, size);
 
-	skb->dev = wpan_phy->dev;
+	skb->dev = wpan_dev->netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
 	r = drv_xmit_async( local, skb );

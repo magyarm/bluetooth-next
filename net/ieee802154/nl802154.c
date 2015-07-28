@@ -22,6 +22,7 @@
 #include <net/netlink.h>
 #include <net/nl802154.h>
 #include <net/sock.h>
+#include <net/ieee802154_netdev.h>
 
 #include "nl802154.h"
 #include "rdev-ops.h"
@@ -1217,7 +1218,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
    struct sk_buff *skb;
    struct genl_info *info;
    struct cfg802154_registered_device *rdev;
-   struct device *dev;
+   struct net_device *dev;
    struct wpan_dev *wpan_dev;
 
    int i;
@@ -1237,7 +1238,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
    skb = wrk->skb;
    info = wrk->info;
    rdev = info->user_ptr[0];
-   dev = &rdev->wpan_phy.dev;
+   dev = info->user_ptr[1];
    wpan_dev = dev->ieee802154_ptr;
 
    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
@@ -1256,6 +1257,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
    status = IEEE802154_SUCCESS;
 
    //Check the channel mask for which channels we want to do
+   channel_page = wrk->cmd_stuff.ed_scan.channel_page;
    scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
    scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
 
@@ -1269,7 +1271,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
            result_list_size += !!( scan_channels & (1 << i) );
            if( scan_channels & (1 << i) ) {
          	  //Set the phy channel to the first channel.
-         	  r = rdev_set_channel(rdev, page, channel);
+         	  r = rdev_set_channel(rdev, channel_page, i);
 
          	  //Send the beacon request
          	  r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ, info );
@@ -1413,10 +1415,10 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
 
-    if( IEEE802154_MAC_SCAN_ED = scan_type ) {
+    if( IEEE802154_MAC_SCAN_ED == scan_type ) {
    	 wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
    	 INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
-    } else if( IEEE802154_MAC_SCAN_ACTIVE = scan_type ) {
+    } else if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
    	 wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
    	 INIT_WORK( &wrk->work, nl802154_active_scan_cnf );
     }
