@@ -1389,7 +1389,13 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 	}
 
 	// Explicitely turn the radio on
+        // Enable reception of packets, and sending out netlink response
 	r = rdev_beacon_register_listener(rdev, NULL, info );
+
+        // Wait for work function to signal completion after a 10 second time-out.  This should be
+        // enough time for us to receive a beacon frame and send the indication back to user space
+        // before returning (and closing the netlink socket).
+        // Data is queued up and sent out once this doit() function returns.
 
 	wait_for_completion( &wrk->completion );
 

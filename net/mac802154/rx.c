@@ -59,82 +59,83 @@ static void rx_receive_work( struct work_struct *work )
 
 static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct genl_info *info)
 {
-	int ret = 0;
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
-	skb->protocol = htons(ETH_P_IEEE802154);
-	struct workbeaconreceive *wrk;
+    int ret = 0;
+    struct ieee802154_beacon_indication ind;
+    struct workbeaconreceive *wrk;
 
-   wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-   if ( NULL == wrk ) {
+    skb->ip_summed = CHECKSUM_UNNECESSARY;
+    skb->protocol = htons(ETH_P_IEEE802154);
+
+    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+    if ( NULL == wrk ) {
        ret = -ENOMEM;
        goto out;
-   }
-
-    struct ieee802154_beacon_indication ind;
-
-	/* Lets start parsing beacon packet here.
-	 * Data packets are processed by netif_receive_skb().
-	 * Not sure if beacon packets need any processing present in netif_receive_skb()
-	 */
+    }
 
 
-	/* Step 1: Extract the following beacon data.
-	 *
-	 * Beacon indication contains the following data:
-	 * BSN :
-	 *       desc: beacon sequence number
-	 *       type: uint8_t
-	 * PAN descriptor :
-	 *       CoordAddrMode:
-	 *            desc:
-	 *            type: enum
-	 *       CoordPanId:
-	 *            desc: PanID of the coordinator
-	 *            type:
-	 *       Channel Number:
-	 *            desc:
-	 *            type:
-	 *       Channel Page:
-	 *            desc:
-	 *            type:
-	 *       Superframe Spec:
-	 *            desc:
-	 *            type:
-	 *       GTP Permit:
-	 *            desc:
-	 *            type:
-	 *       Link Quality:
-	 *            desc:
-	 *            type: integer
-	 *       Timestamp
-	 *            desc:
-	 *            type: integer
-	 *
-	 * PendAddrSpec:
-	 *       desc: Beacon pending address specification (?)
-	 *       type: bitfield
-	 *
-	 * AddrList:
-	 *
-	 * sduLength:
-	 *       desc: Number of octets (bytes?) contained in the beacon payload
-	 *
-	 * sdu:
-	 *       desc: Set of octets (bytes?) comprising the beacon payload
-	 *
-	 */
+    /* Lets start parsing beacon packet here.
+     * Data packets are processed by netif_receive_skb().
+     * Not sure if beacon packets need any processing present in netif_receive_skb()
+     */
 
-	//The addressing fields shall comprise only the source address fields.
-	//The Source PAN Identifier and Source Address fields shall contain the PAN identifier and address,
-	//respectively, of the device transmitting the beacon.
+
+    /* Step 1: Extract the following beacon data.
+     *
+     * Beacon indication contains the following data:
+     * BSN :
+     *       desc: beacon sequence number
+     *       type: uint8_t
+     * PAN descriptor :
+     *       CoordAddrMode:
+     *            desc:
+     *            type: enum
+     *       CoordPanId:
+     *            desc: PanID of the coordinator
+     *            type:
+     *       Channel Number:
+     *            desc:
+     *            type:
+     *       Channel Page:
+     *            desc:
+     *            type:
+     *       Superframe Spec:
+     *            desc:
+     *            type:
+     *       GTP Permit:
+     *            desc:
+     *            type:
+     *       Link Quality:
+     *            desc:
+     *            type: integer
+     *       Timestamp
+     *            desc:
+     *            type: integer
+     *
+     * PendAddrSpec:
+     *       desc: Beacon pending address specification (?)
+     *       type: bitfield
+     *
+     * AddrList:
+     *
+     * sduLength:
+     *       desc: Number of octets (bytes?) contained in the beacon payload
+     *
+     * sdu:
+     *       desc: Set of octets (bytes?) comprising the beacon payload
+     *
+     */
+
+    //The addressing fields shall comprise only the source address fields.
+    //The Source PAN Identifier and Source Address fields shall contain the PAN identifier and address,
+    //respectively, of the device transmitting the beacon.
 
     ind.bsn = hdr->seq;
 
-    printk( KERN_INFO "Beacon Sequence Number received: %x", ind.bsn );
+    printk( KERN_INFO "Beacon Sequence Number received: %x\n", ind.bsn );
 
-	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
-	 * where it can be accessed via netlink
-	 */
+    /* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
+     * where it can be accessed via netlink
+     */
     wrk->ind = ind;
     wrk->beacon_listener = info;
 
@@ -143,7 +144,7 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hd
     ret = schedule_work( &wrk->work );
 
 out:
-	return ret;
+    return ret;
 }
 
 static int
@@ -209,12 +210,12 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
-		printk( KERN_INFO "Received Data Frame Control");
+		printk( KERN_INFO "Received Data Frame Control\n");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
 		printk( KERN_INFO "beacon listener address: %x\n", sdata->local->beacon_listener );
 		if( sdata->local->beacon_listener ) {
-			printk( KERN_INFO "Received Beacon Frame Control");
+			printk( KERN_INFO "Received Beacon Frame Control\n");
 			return ieee802154_deliver_bcn(skb, hdr, sdata->local->beacon_listener);
 		}
 		break;
