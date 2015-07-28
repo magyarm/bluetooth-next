@@ -55,6 +55,9 @@ enum nl802154_commands {
 	NL802154_CMD_ED_SCAN_REQ,
 	NL802154_CMD_ED_SCAN_CNF,
 
+	NL802154_CMD_BEACON_NOTIFY_IND,
+	NL802154_CMD_SET_BEACON_NOTIFY,
+
 	/* add new commands above here */
 
 	/* used to define NL802154_CMD_MAX below */
@@ -109,6 +112,12 @@ enum nl802154_attrs {
 
 	NL802154_ATTR_SUPPORTED_COMMANDS,
 
+	 NL802154_ATTR_BEACON_SEQUENCE_NUMBER,
+	 NL802154_ATTR_PAN_DESCRIPTOR,
+	 NL802154_ATTR_PEND_ADDR_SPEC,
+	 NL802154_ATTR_ADDR_LIST,
+	 NL802154_SDU_LENGTH,
+	 NL802154_SDU,
 	NL802154_ATTR_SCAN_STATUS,
 	NL802154_ATTR_SCAN_TYPE,
 	NL802154_ATTR_SCAN_DURATION,
@@ -261,5 +270,17 @@ enum nl802154_supported_bool_states {
 	__NL802154_SUPPORTED_BOOL_AFTER_LAST,
 	NL802154_SUPPORTED_BOOL_MAX = __NL802154_SUPPORTED_BOOL_AFTER_LAST - 1
 };
+
+struct ieee802154_beacon_indication {
+	u8 bsn;
+	struct pan_descriptor {
+		u8 lqi;
+	} pan_desc;
+	u8 sdu_len;
+};
+
+struct genl_info;
+
+int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info );
 
 #endif /* __NL802154_H */

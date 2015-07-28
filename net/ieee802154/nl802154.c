@@ -14,6 +14,7 @@
  */
 
 #include <linux/rtnetlink.h>
+#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
@@ -264,6 +265,13 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
     [NL802154_ATTR_SEC_KEY_SOURCE] = { .type = NLA_NESTED, },
     [NL802154_ATTR_SEC_KEY_SOURCE_ENTRY] = { .type = NLA_U8, },
     [NL802154_ATTR_SEC_KEY_INDEX] = { .type = NLA_U8, },
+
+	[NL802154_ATTR_BEACON_SEQUENCE_NUMBER] = { .type = NLA_U8, },
+	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
+	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
+	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
+	[NL802154_SDU_LENGTH] = { .type = NLA_U32 },
+	[NL802154_SDU] = { .type = NLA_NESTED },
 };
 
 /* message building helper */
@@ -1106,6 +1114,12 @@ out:
     return r;
 }
 
+static int nl802154_add_work( struct work802154 *wrk ) {
+    int r;
+	r = schedule_work( &wrk->work );
+	return r ? 0 : -EALREADY;
+}
+
 static void nl802154_ed_scan_cnf( struct work_struct *work ) {
 
     int r;
@@ -1195,10 +1209,73 @@ out:
     return;
 }
 
-static int nl802154_add_work( struct work802154 *wrk ) {
-    int r;
-	r = schedule_work( &wrk->work );
-	return r ? 0 : -EALREADY;
+static void nl802154_beacon_work( struct work_struct *work ) {
+
+	struct work802154 *wrk;
+	struct cfg802154_registered_device *rdev;
+	struct genl_info *info;
+
+	wrk = container_of( work, struct work802154, work );
+
+	info = wrk->info;
+
+	rdev = info->user_ptr[0];
+
+	msleep( 10000 );
+
+	rdev_beacon_deregister_listener( rdev );
+
+	complete( &wrk->completion );
+	kfree( wrk );
+	return;
+}
+
+int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
+{
+	int ret = 0;
+	struct sk_buff *notification;
+	void *hdr;
+	struct net *net;
+
+	printk( KERN_INFO "In nl802154_beacon_notify_indication\n");
+	printk( KERN_INFO "PortID we are sending to is: %d\n", info->snd_portid );
+	printk( KERN_INFO "Info address: %x\n", info );
+
+	notification = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == notification ) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	hdr = nl802154hdr_put( notification, info->snd_portid, info->snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	if ( NULL == hdr ) {
+		ret = -ENOBUFS;
+		goto free_reply;
+	}
+
+	ret = nla_put_u8( notification, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn );
+
+	if ( 0 != ret ) {
+		goto nla_put_failure;
+	}
+
+	genlmsg_end( notification, hdr );
+
+	net = genl_info_net(info);
+
+	printk( KERN_INFO "info->net address: %x\n", net );
+
+	printk( KERN_INFO "net->genl_sock address: %x\n", net->genl_sock );
+
+	ret = genlmsg_reply(notification, info);
+	goto out;
+
+nla_put_failure:
+free_reply:
+	nlmsg_free( notification );
+
+out:
+	return ret;
 }
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
@@ -1275,6 +1352,54 @@ free_wrk:
 
 out:
     return r;
+}
+
+static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
+{
+	int r = 0;
+
+	struct cfg802154_registered_device *rdev;
+	struct work802154 *wrk;
+
+	struct device *dev;
+
+	rdev = info->user_ptr[0];
+
+	dev = &rdev->wpan_phy.dev;
+
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+	printk( KERN_INFO "PortID want to send to: %d\n", info->snd_portid );
+
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+	if ( NULL == wrk ) {
+		r = -ENOMEM;
+		goto out;
+	}
+
+	wrk->info = info;
+
+	init_completion( &wrk->completion );
+	INIT_WORK( &wrk->work, nl802154_beacon_work );
+	//schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
+	r = nl802154_add_work( wrk );
+	if ( 0 != r ) {
+		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	// Explicitely turn the radio on
+	r = rdev_beacon_register_listener(rdev, NULL, info );
+
+	wait_for_completion( &wrk->completion );
+
+	r = 0;
+	goto out;
+
+free_wrk:
+    kfree( wrk );
+out:
+	return r;
 }
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
@@ -1486,6 +1611,14 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_ED_SCAN_REQ,
 		.doit = nl802154_ed_scan_req,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
+		.doit = nl802154_set_beacon_indication,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
