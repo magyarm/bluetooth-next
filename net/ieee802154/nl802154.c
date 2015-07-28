@@ -1212,6 +1212,7 @@ out:
 
 static void nl802154_active_scan_cnf( struct work_struct *work )
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
    int r;
 
    struct work802154 *wrk;
@@ -1239,7 +1240,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
    info = wrk->info;
    rdev = info->user_ptr[0];
    dev = info->user_ptr[1];
-   wpan_dev = dev->ieee802154_ptr;
+   wpan_dev = &rdev->wpan_phy.dev;;
 
    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
    if ( NULL == reply ) {
@@ -1269,17 +1270,20 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 
    for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
            result_list_size += !!( scan_channels & (1 << i) );
+           rdev_beacon_register_listener(rdev, NULL, info );
            if( scan_channels & (1 << i) ) {
+         	  printk(KERN_INFO "Scanning channel #: %d\n", i);
          	  //Set the phy channel to the first channel.
          	  r = rdev_set_channel(rdev, channel_page, i);
 
          	  //Send the beacon request
-         	  r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ, info );
+         	  r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
 
          	  //Wait scan_duration milliseconds for beacons to come in
          	  msleep( scan_duration * 1000 );
            }
        }
+   rdev_beacon_deregister_listener( rdev );
 
 nla_put_failure:
 free_reply:
@@ -1372,6 +1376,8 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	struct work802154 *wrk;
 	struct device *dev;
 
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
     rdev = info->user_ptr[0];
     dev = &rdev->wpan_phy.dev;
 
@@ -1389,6 +1395,8 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] );
     scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
     channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
+
+    printk(KERN_INFO "Scan type: %d\n", scan_type);
 
     if ( channel_page > IEEE802154_MAX_PAGE ) {
         dev_err( dev, "invalid channel_page %u\n", channel_page );
@@ -1421,6 +1429,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     } else if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
    	 wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
    	 INIT_WORK( &wrk->work, nl802154_active_scan_cnf );
+   	 printk(KERN_INFO "Adding active scan work\n");
     }
 
     init_completion( &wrk->completion );
