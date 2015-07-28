@@ -195,4 +195,14 @@ rdev_set_lbt_mode(struct cfg802154_registered_device *rdev,
 	return ret;
 }
 
+static inline int
+rdev_ed_scan(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev, u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration )
+{
+	int ret = 0;
+
+	ret = rdev->ops->ed_scan(&rdev->wpan_phy, wpan_dev, page, scan_channels, level, nlevel, duration );
+
+	return ret;
+}
+
 #endif /* __CFG802154_RDEV_OPS */

@@ -26,6 +26,26 @@
 #include "rdev-ops.h"
 #include "core.h"
 
+struct work802154 {
+    struct sk_buff *skb;
+    struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
+    int cmd; // selects which item in the union below to use
+    union {
+        // put any additional command-specific structs in here
+        // note: only for information that must be conveyed e.g.
+        // between REQ and CNF - not for the entire CNF or IND.
+        // If you can extrapolate information from rdev, wpan_dev,
+        // info, etc, do not duplicated it here.
+        struct ed_scan {
+            u8 channel_page;
+            u32 scan_channels;
+            u8 scan_duration;
+        } ed_scan;
+    } cmd_stuff;
+    struct completion completion;
+    struct work_struct work;
+};
+
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info);
 
@@ -230,6 +250,20 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_WPAN_PHY_CAPS] = { .type = NLA_NESTED },
 
 	[NL802154_ATTR_SUPPORTED_COMMANDS] = { .type = NLA_NESTED },
+
+    [NL802154_ATTR_SCAN_STATUS] = { .type = NLA_U8, },
+    [NL802154_ATTR_SCAN_TYPE] = { .type = NLA_U8, },
+    [NL802154_ATTR_SCAN_DURATION] = { .type = NLA_U8, },
+    [NL802154_ATTR_SCAN_RESULT_LIST_SIZE] = { .type = NLA_U8, },
+    [NL802154_ATTR_SCAN_ENERGY_DETECT_LIST] = { .type = NLA_NESTED, },
+    [NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY] = { .type = NLA_U8, },
+    [NL802154_ATTR_SCAN_DETECTED_CATEGORY] = { .type = NLA_U8, },
+
+    [NL802154_ATTR_SEC_LEVEL] = { .type = NLA_U8, },
+    [NL802154_ATTR_SEC_KEY_ID_MODE] = { .type = NLA_U8, },
+    [NL802154_ATTR_SEC_KEY_SOURCE] = { .type = NLA_NESTED, },
+    [NL802154_ATTR_SEC_KEY_SOURCE_ENTRY] = { .type = NLA_U8, },
+    [NL802154_ATTR_SEC_KEY_INDEX] = { .type = NLA_U8, },
 };
 
 /* message building helper */
@@ -458,6 +492,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
+	CMD(ed_scan, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1042,6 +1077,206 @@ static int nl802154_set_lbt_mode(struct sk_buff *skb, struct genl_info *info)
 	return rdev_set_lbt_mode(rdev, wpan_dev, mode);
 }
 
+static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, u32 scan_channels, u8 *ed ) {
+    int r;
+
+    int i, j;
+    struct nlattr *ed_list;
+    ed_list = nla_nest_start( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST );
+    if ( NULL == ed_list ) {
+        r = -ENOBUFS;
+        goto out;
+    }
+    for( i = 0, j = 0; i <= IEEE802154_MAX_CHANNEL && j <= result_list_size; i++ ) {
+        if ( scan_channels & BIT( i ) ) {
+            r = nla_put_u8( reply, NL802154_ATTR_SCAN_ENERGY_DETECT_LIST_ENTRY, ed[ j ] );
+            if ( 0 != r ) {
+                goto nla_put_failure;
+            }
+            j++;
+        }
+    }
+    nla_nest_end( reply, ed_list );
+    r = 0;
+    goto out;
+
+nla_put_failure:
+    r = -ENOBUFS;
+out:
+    return r;
+}
+
+static void nl802154_ed_scan_cnf( struct work_struct *work ) {
+
+    int r;
+    const u8 scan_type = 0;
+
+    u8 ed[ IEEE802154_MAX_CHANNEL + 1 ];
+
+    struct work802154 *wrk;
+    struct sk_buff *skb;
+    struct genl_info *info;
+    struct cfg802154_registered_device *rdev;
+    struct device *dev;
+
+    int i;
+
+    u8 status;
+    u8 channel_page;
+    u32 scan_channels;
+    u8 scan_duration;
+    __le32 unscanned_channels;
+    u8 result_list_size;
+    u8 detected_category;
+    struct sk_buff *reply;
+    void *hdr;
+
+    wrk = container_of( work, struct work802154, work );
+    skb = wrk->skb;
+    info = wrk->info;
+    rdev = info->user_ptr[0];
+    dev = &rdev->wpan_phy.dev;
+
+    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+    if ( NULL == reply ) {
+        r = -ENOMEM;
+        dev_err( dev, "nlmsg_new failed (%d)\n", r );
+        goto out;
+    }
+
+    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ED_SCAN_CNF );
+    if ( NULL == hdr ) {
+        r = -ENOBUFS;
+        goto free_reply;
+    }
+
+    status = IEEE802154_SUCCESS;
+    unscanned_channels = 0;
+    detected_category = 2; // ed_scan
+
+    channel_page = wrk->cmd_stuff.ed_scan.channel_page;
+    scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
+    scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
+
+    for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
+        result_list_size += !!( scan_channels & (1 << i) );
+    }
+
+    r = rdev_ed_scan(rdev, NULL, channel_page, scan_channels, ed, result_list_size, scan_duration );
+    if ( r < 0 ) {
+        dev_err( dev, "rdev_ed_scan failed (%d)\n", r );
+        goto free_reply;
+    }
+
+    r =
+        nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, status ) ||
+        nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, scan_type ) ||
+        nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page ) ||
+        nla_put_u32( reply, NL802154_ATTR_SUPPORTED_CHANNEL, unscanned_channels ) ||
+        nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size ) ||
+        nl802154_ed_scan_put_ed( reply, result_list_size, scan_channels, ed ) ||
+        nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, detected_category );
+    if ( 0 != r ) {
+        dev_err( dev, "nla_put_failure (%d)\n", r );
+        goto nla_put_failure;
+    }
+
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );
+    goto out;
+
+nla_put_failure:
+free_reply:
+    nlmsg_free( reply );
+out:
+    complete( &wrk->completion );
+    kfree( wrk );
+    return;
+}
+
+static int nl802154_add_work( struct work802154 *wrk ) {
+    int r;
+	r = schedule_work( &wrk->work );
+	return r ? 0 : -EALREADY;
+}
+
+static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
+{
+    int r;
+
+    u8 scan_type;
+    __le32 scan_channels;
+    u8 scan_duration;
+    u8 channel_page;
+
+	struct cfg802154_registered_device *rdev;
+	struct work802154 *wrk;
+	struct device *dev;
+
+    rdev = info->user_ptr[0];
+    dev = &rdev->wpan_phy.dev;
+
+    if ( ! (
+        info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
+        info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] &&
+        info->attrs[ NL802154_ATTR_SCAN_DURATION ] &&
+        info->attrs[ NL802154_ATTR_PAGE ]
+    ) ) {
+        r = -EINVAL;
+        goto out;
+    }
+
+    scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
+    scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] );
+    scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
+    channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
+
+    if ( channel_page > IEEE802154_MAX_PAGE ) {
+        dev_err( dev, "invalid channel_page %u\n", channel_page );
+        r = -EINVAL;
+        goto out;
+    }
+
+    if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
+        dev_err( dev, "invalid scan_channels %u\n", scan_channels );
+        r = -EINVAL;
+        goto out;
+    }
+
+    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+    if ( NULL == wrk ) {
+        r = -ENOMEM;
+        goto out;
+    }
+
+    wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+    wrk->skb = skb;
+    wrk->info = info;
+    wrk->cmd_stuff.ed_scan.channel_page = channel_page;
+    wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
+    wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
+
+    init_completion( &wrk->completion );
+    INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+    r = nl802154_add_work( wrk );
+    if ( 0 != r ) {
+        dev_err( dev, "nl802154_add_work failed (%d)\n", r );
+        goto free_wrk;
+    }
+
+    wait_for_completion( &wrk->completion );
+
+    r = 0;
+    goto out;
+
+free_wrk:
+    kfree( wrk );
+
+out:
+    return r;
+}
+
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
 #define NL802154_FLAG_NEED_RTNL		0x04
@@ -1246,6 +1481,14 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_ED_SCAN_REQ,
+		.doit = nl802154_ed_scan_req,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 };
