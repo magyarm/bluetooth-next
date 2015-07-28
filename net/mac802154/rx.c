@@ -29,6 +29,12 @@
 
 #include "ieee802154_i.h"
 
+struct workbeaconreceive {
+	struct ieee802154_beacon_indication ind;
+	struct genl_info *beacon_listener;
+	struct work_struct work;
+};
+
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -39,11 +45,30 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	return netif_receive_skb(skb);
 }
 
+static void rx_receive_work( struct work_struct *work )
+{
+	struct workbeaconreceive *wrk;
+
+	wrk = container_of( work, struct workbeaconreceive, work );
+
+	cfg802154_inform_beacon(&wrk->ind, wrk->beacon_listener);
+
+	kfree( wrk );
+	return;
+}
+
 static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct genl_info *info)
 {
 	int ret = 0;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
+	struct workbeaconreceive *wrk;
+
+   wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+   if ( NULL == wrk ) {
+       ret = -ENOMEM;
+       goto out;
+   }
 
     struct ieee802154_beacon_indication ind;
 
@@ -110,8 +135,14 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hd
 	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
 	 * where it can be accessed via netlink
 	 */
-	ret = cfg802154_inform_beacon(&ind, info);
+    wrk->ind = ind;
+    wrk->beacon_listener = info;
 
+    INIT_WORK( &wrk->work, rx_receive_work );
+
+    ret = schedule_work( &wrk->work );
+
+out:
 	return ret;
 }
 
@@ -181,7 +212,7 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		printk( KERN_INFO "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
-		printk( KERN_INFO "Info address: %x", sdata->local->beacon_listener );
+		printk( KERN_INFO "beacon listener address: %x\n", sdata->local->beacon_listener );
 		if( sdata->local->beacon_listener ) {
 			printk( KERN_INFO "Received Beacon Frame Control");
 			return ieee802154_deliver_bcn(skb, hdr, sdata->local->beacon_listener);

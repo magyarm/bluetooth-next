@@ -1235,9 +1235,11 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 	int ret = 0;
 	struct sk_buff *notification;
 	void *hdr;
+	struct net *net;
 
-	printk( KERN_INFO "In nl802154_beacon_notify_indication");
-	printk( KERN_INFO "PortID we are sending to is: %d", info->snd_portid );
+	printk( KERN_INFO "In nl802154_beacon_notify_indication\n");
+	printk( KERN_INFO "PortID we are sending to is: %d\n", info->snd_portid );
+	printk( KERN_INFO "Info address: %x\n", info );
 
 	notification = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
 	if ( NULL == notification ) {
@@ -1259,7 +1261,14 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 
 	genlmsg_end( notification, hdr );
 
+	net = genl_info_net(info);
+
+	printk( KERN_INFO "info->net address: %x\n", net );
+
+	printk( KERN_INFO "net->genl_sock address: %x\n", net->genl_sock );
+
 	ret = genlmsg_reply(notification, info);
+	goto out;
 
 nla_put_failure:
 free_reply:
@@ -1359,6 +1368,8 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 	dev = &rdev->wpan_phy.dev;
 
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+	printk( KERN_INFO "PortID want to send to: %d\n", info->snd_portid );
 
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
 	if ( NULL == wrk ) {
