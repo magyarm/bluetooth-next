@@ -43,7 +43,7 @@ struct work802154 {
         } ed_scan;
     } cmd_stuff;
     struct completion completion;
-    struct work_struct work;
+    struct delayed_work work;
 };
 
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
@@ -1125,7 +1125,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     u8 channel_page;
     u32 scan_channels;
     u8 scan_duration;
-    __le32 unscanned_channels;
+    u32 unscanned_channels;
     u8 result_list_size;
     u8 detected_category;
     struct sk_buff *reply;
@@ -1195,12 +1195,6 @@ out:
     return;
 }
 
-static int nl802154_add_work( struct work802154 *wrk ) {
-    int r;
-	r = schedule_work( &wrk->work );
-	return r ? 0 : -EALREADY;
-}
-
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
     int r;
@@ -1258,10 +1252,10 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
 
     init_completion( &wrk->completion );
-    INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
-    r = nl802154_add_work( wrk );
+    INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
+    r = schedule_delayed_work( wrk, 0 ) ? 0 : -EALREADY;
     if ( 0 != r ) {
-        dev_err( dev, "nl802154_add_work failed (%d)\n", r );
+        dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
         goto free_wrk;
     }
 
