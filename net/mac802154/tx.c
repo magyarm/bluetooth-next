@@ -82,14 +82,9 @@ static netdev_tx_t
 ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 {
 	printk( KERN_INFO "Inside %s\n", __FUNCTION__);
-	printk( KERN_INFO "Address of the ieee802154_local structure: %x\n", local );
 
 	struct net_device *dev = skb->dev;
 	int ret;
-
-	printk( KERN_INFO "Address of the ieee802154_local->ieee802154_hw.flags structure: %x\n", &local->hw.flags );
-	printk( KERN_INFO "Address of skb->data: %x\n", skb->data );
-	printk( KERN_INFO "skb->len: %x\n", skb->len );
 
 	if (!(local->hw.flags & IEEE802154_HW_TX_OMIT_CKSUM)) {
 		u16 crc = crc_ccitt(0, skb->data, skb->len);
@@ -146,9 +141,6 @@ ieee802154_subif_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(dev);
 	int rc;
-
-	printk( KERN_INFO "Address of the sdata structure: %x\n", sdata );
-	printk( KERN_INFO "Address of sdata->local structure: %x\n", sdata->local );
 
 	rc = mac802154_llsec_encrypt(&sdata->sec, skb);
 	if (rc) {

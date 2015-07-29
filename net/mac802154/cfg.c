@@ -380,7 +380,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	//Create beacon frame / payload
 	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
 	tlen = wpan_dev->netdev->needed_tailroom;
-	size = 8; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
+	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
 
 	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
 	printk( KERN_INFO "Address of the netdev device structure: %x\n", wpan_dev->netdev );
@@ -423,9 +423,12 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 
 	//Add the mac header to the data
 	r = memcpy( data, cb, size );
+	data[0] = cmd_frame_id;
 
 	skb->dev = wpan_dev->netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
+
+	printk( KERN_INFO "Data bytes sent out %x, %x, %x, %x, %x, %x, %x, %x ",data[0], data[1],data[2], data[3],data[4], data[5],data[6], data[7]  );
 
 //	r = drv_xmit_async( local, skb );
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );

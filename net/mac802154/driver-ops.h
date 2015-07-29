@@ -13,8 +13,7 @@ static inline int
 drv_xmit_async(struct ieee802154_local *local, struct sk_buff *skb)
 {
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
-	printk( KERN_INFO "Size of the SKB: %d", sizeof( &skb ) );
-	printk( KERN_INFO "SKB data length: %d", skb->len );
+	printk( KERN_INFO "SKB->len: %d", skb->len );
 	return local->ops->xmit_async(&local->hw, skb);
 }
 
