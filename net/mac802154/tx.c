@@ -43,6 +43,7 @@ static struct ieee802154_xmit_cb ieee802154_xmit_cb;
 
 static void ieee802154_xmit_worker(struct work_struct *work)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct ieee802154_xmit_cb *cb =
 		container_of(work, struct ieee802154_xmit_cb, work);
 	struct ieee802154_local *local = cb->local;
@@ -80,14 +81,22 @@ err_tx:
 static netdev_tx_t
 ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 {
+	printk( KERN_INFO "Inside %s\n", __FUNCTION__);
+	printk( KERN_INFO "Address of the ieee802154_local structure: %x\n", local );
+
 	struct net_device *dev = skb->dev;
 	int ret;
+
+	printk( KERN_INFO "Address of the ieee802154_local->ieee802154_hw.flags structure: %x\n", &local->hw.flags );
+	printk( KERN_INFO "Address of skb->data: %x\n", skb->data );
+	printk( KERN_INFO "skb->len: %x\n", skb->len );
 
 	if (!(local->hw.flags & IEEE802154_HW_TX_OMIT_CKSUM)) {
 		u16 crc = crc_ccitt(0, skb->data, skb->len);
 
 		put_unaligned_le16(crc, skb_put(skb, 2));
 	}
+
 
 	if (skb_cow_head(skb, local->hw.extra_tx_headroom))
 		goto err_tx;
@@ -116,6 +125,7 @@ ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 	return NETDEV_TX_OK;
 
 err_tx:
+printk(KERN_INFO "%s err_tx\n", __FUNCTION__);
 	kfree_skb(skb);
 	return NETDEV_TX_OK;
 }
@@ -133,8 +143,12 @@ ieee802154_monitor_start_xmit(struct sk_buff *skb, struct net_device *dev)
 netdev_tx_t
 ieee802154_subif_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(dev);
 	int rc;
+
+	printk( KERN_INFO "Address of the sdata structure: %x\n", sdata );
+	printk( KERN_INFO "Address of sdata->local structure: %x\n", sdata->local );
 
 	rc = mac802154_llsec_encrypt(&sdata->sec, skb);
 	if (rc) {
