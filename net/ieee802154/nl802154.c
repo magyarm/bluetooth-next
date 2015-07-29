@@ -1205,7 +1205,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
     int r;
 
     u8 scan_type;
-    __le32 scan_channels;
+    u32 scan_channels;
     u8 scan_duration;
     u8 channel_page;
 
