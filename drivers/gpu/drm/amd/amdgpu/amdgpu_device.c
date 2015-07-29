@@ -1191,7 +1191,9 @@ static int amdgpu_early_init(struct amdgpu_device *adev)
 		return -EINVAL;
 	}
 
-
+	adev->ip_block_enabled = kcalloc(adev->num_ip_blocks, sizeof(bool), GFP_KERNEL);
+	if (adev->ip_block_enabled == NULL)
+		return -ENOMEM;
 
 	if (adev->ip_blocks == NULL) {
 		DRM_ERROR("No IP blocks found!\n");
@@ -1205,10 +1207,15 @@ static int amdgpu_early_init(struct amdgpu_device *adev)
 		} else {
 			if (adev->ip_blocks[i].funcs->early_init) {
 				r = adev->ip_blocks[i].funcs->early_init((void *)adev);
-				if (r)
+				if (r == -ENOENT)
+					adev->ip_block_enabled[i] = false;
+				else if (r)
 					return r;
+				else
+					adev->ip_block_enabled[i] = true;
+			} else {
+				adev->ip_block_enabled[i] = true;
 			}
-			adev->ip_block_enabled[i] = true;
 		}
 	}
 
@@ -1575,8 +1582,7 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 	amdgpu_fence_driver_fini(adev);
 	amdgpu_fbdev_fini(adev);
 	r = amdgpu_fini(adev);
-	if (adev->ip_block_enabled)
-		kfree(adev->ip_block_enabled);
+	kfree(adev->ip_block_enabled);
 	adev->ip_block_enabled = NULL;
 	adev->accel_working = false;
 	/* free i2c buses */
@@ -2000,4 +2006,10 @@ int amdgpu_debugfs_init(struct drm_minor *minor)
 void amdgpu_debugfs_cleanup(struct drm_minor *minor)
 {
 }
+#else
+static int amdgpu_debugfs_regs_init(struct amdgpu_device *adev)
+{
+	return 0;
+}
+static void amdgpu_debugfs_regs_cleanup(struct amdgpu_device *adev) { }
 #endif
