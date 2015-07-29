@@ -264,6 +264,11 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
     [NL802154_ATTR_SEC_KEY_SOURCE] = { .type = NLA_NESTED, },
     [NL802154_ATTR_SEC_KEY_SOURCE_ENTRY] = { .type = NLA_U8, },
     [NL802154_ATTR_SEC_KEY_INDEX] = { .type = NLA_U8, },
+
+	[NL802154_ATTR_ADDR_MODE] = { .type = NLA_U8, },
+
+	[NL802154_ATTR_ASSOC_CAP_INFO] = { .type = NLA_U8, },
+	[NL802154_ATTR_ASSOC_STATUS] = { .type = NLA_U8, },
 };
 
 /* message building helper */
@@ -1271,6 +1276,20 @@ out:
     return r;
 }
 
+static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
+{
+    int r;
+    r = -ENOSYS;
+    return r;
+}
+
+static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
+{
+    int r;
+    r = -ENOSYS;
+    return r;
+}
+
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
 #define NL802154_FLAG_NEED_RTNL		0x04
@@ -1483,6 +1502,22 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_ASSOC_REQ,
+		.doit = nl802154_assoc_req,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_ASSOC_RSP,
+		.doit = nl802154_assoc_rsp,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 };
