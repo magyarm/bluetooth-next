@@ -1302,27 +1302,65 @@ enum {
 };
 
 static void nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, u16 assoc_short_address, u8 status ) {
+
 	int r;
 
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	//struct net_device *dev = info->user_ptr[1];
+
+    struct sk_buff *reply;
+    void *hdr;
+
+	dev_info( &rdev->wpan_phy.dev, "%s: assoc_short_address: 0x%04x, status: 0x%02x\n", __FUNCTION__, assoc_short_address, status );
+
+    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+    if ( NULL == reply ) {
+        r = -ENOMEM;
+        dev_err( &rdev->wpan_phy.dev, "nlmsg_new failed (%d)\n", r );
+        goto out;
+    }
+
+    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ASSOC_CNF );
+    if ( NULL == hdr ) {
+        r = -ENOBUFS;
+        goto free_reply;
+    }
+
+    r =
+        nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
+        nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
+    if ( 0 != r ) {
+        dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
+        goto nla_put_failure;
+    }
+
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );
+    goto out;
+
+nla_put_failure:
+free_reply:
+    nlmsg_free( reply );
 out:
-	return;
+    return;
 }
 
-static void nl802154_assoc_req_complete( struct sk_buff *skb_in, struct work_struct *work ) {
+static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
+	struct work_struct *work = (struct work_struct *)arg;
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
-	struct sk_buff *skb_out = wrk->skb;
+	//struct sk_buff *skb_out = wrk->skb;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+//	struct net_device *dev = info->user_ptr[1];
 
 	u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
 	u8 status = MAC_ERR_NO_DATA;
 
-	dev_info( &dev->dev, "%s: assoc_short_address: 0x%04x, status: 0x%02x\n", __FUNCTION__, assoc_short_address, status );
+	dev_info( &rdev->wpan_phy.dev, "%s\n", __FUNCTION__ );
 
 	cancel_delayed_work( &wrk->work );
 
@@ -1330,32 +1368,32 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, struct work_str
 
 	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
 
-    complete( &wrk->completion );
-    kfree( wrk );
+	complete( &wrk->completion );
+	kfree( wrk );
 }
 
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
-    static const u8 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
+    static const u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
     static const u8 status = MAC_ERR_NO_ACK;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
-	struct sk_buff *skb_out = wrk->skb;
+	//struct sk_buff *skb_out = wrk->skb;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
-	dev_err( &dev->dev, "%s\n", __FUNCTION__ );
+	dev_err( &rdev->wpan_phy.dev, "%s\n", __FUNCTION__ );
 
-    rdev_deregister_assoc_req_listener( rdev, wpan_dev );
+    rdev_deregister_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
 
     nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
 
-    complete( &wrk->completion );
-    kfree( wrk );
+	complete( &wrk->completion );
+	kfree( wrk );
 }
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
@@ -1381,9 +1419,8 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
     u32 timeout_ms = 5000;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
-	struct device *dev = &rdev->wpan_phy.dev;
+//	struct net_device *dev = info->user_ptr[1];
+	//struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	struct work802154 *wrk;
 
@@ -1398,6 +1435,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		) &&
 		info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ]
     ) ) {
+    	dev_err( &rdev->wpan_phy.dev, "invalid arguments\n" );
         r = -EINVAL;
         goto out;
     }
@@ -1421,20 +1459,20 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
     	}
     	/* no break */
     default:
+    	dev_err( &rdev->wpan_phy.dev, "invalid address / mode combination\n" );
     	r = -EINVAL;
     	goto out;
-    	break;
     }
-    coord_pan_id = nla_get_u8( info->attrs[ NL802154_ATTR_PAN_ID ] );
+    capability_information = nla_get_u8( info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] );
 
     if ( channel_page > IEEE802154_MAX_PAGE ) {
-        dev_err( dev, "invalid channel_page %u\n", channel_page );
+        dev_err( &rdev->wpan_phy.dev, "invalid channel_page %u\n", channel_page );
         r = -EINVAL;
         goto out;
     }
 
     if ( BIT( channel_number ) & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-        dev_err( dev, "invalid channel_number %u\n", channel_number );
+    	dev_err( &rdev->wpan_phy.dev, "invalid channel_number %u\n", channel_number );
         r = -EINVAL;
         goto out;
     }
@@ -1453,7 +1491,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
     INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
     r = schedule_delayed_work( &wrk->work, timeout_ms ) ? 0 : -EALREADY;
     if ( 0 != r ) {
-        dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
+    	dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
         goto free_wrk;
     }
 
@@ -1695,7 +1733,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.doit = nl802154_assoc_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
