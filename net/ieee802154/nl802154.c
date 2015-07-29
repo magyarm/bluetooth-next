@@ -1240,7 +1240,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
    info = wrk->info;
    rdev = info->user_ptr[0];
    dev = info->user_ptr[1];
-   wpan_dev = &rdev->wpan_phy.dev;;
+   wpan_dev = &rdev->wpan_phy.dev;
 
    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
    if ( NULL == reply ) {

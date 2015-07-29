@@ -371,6 +371,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	struct ieee802154_mac_cb *cb;
 	int hlen, tlen, size;
 	struct ieee802154_addr dst_addr, src_addr;
+	unsigned char *data;
 
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 
@@ -393,15 +394,16 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 
 	skb_reset_network_header(skb);
 
-	cb = mac_cb_init(skb);
-	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
-	cb->ackreq = false;
-
+	data = skb_put(skb, size);
 
 	src_addr.mode = IEEE802154_ADDR_NONE;
 	dst_addr.mode = IEEE802154_ADDR_SHORT;
 	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
 	dst_addr.short_addr = 0xbeef;
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = false;
 
 	cb->secen = false;
 
@@ -412,12 +414,17 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
 	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 
-
+	//Add the mac header to the data
+	r = memcpy( data, cb, size );
 
 	skb->dev = wpan_dev->netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
 	r = drv_xmit_async( local, skb );
+	if( 0 == r) {
+		goto out;
+	}
+
 
 error:
 	kfree_skb(skb);
