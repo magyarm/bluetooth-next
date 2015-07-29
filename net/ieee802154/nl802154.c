@@ -1131,7 +1131,7 @@ static void nl802154_ed_scan_cnf( struct work_struct *work ) {
     struct sk_buff *reply;
     void *hdr;
 
-    wrk = container_of( work, struct work802154, work );
+    wrk = container_of( to_delayed_work( work ), struct work802154, work );
     skb = wrk->skb;
     info = wrk->info;
     rdev = info->user_ptr[0];
@@ -1253,7 +1253,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 
     init_completion( &wrk->completion );
     INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
-    r = schedule_delayed_work( wrk, 0 ) ? 0 : -EALREADY;
+    r = schedule_delayed_work( &wrk->work, 0 ) ? 0 : -EALREADY;
     if ( 0 != r ) {
         dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
         goto free_wrk;
