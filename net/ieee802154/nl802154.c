@@ -270,8 +270,9 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
 	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
 	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
-	[NL802154_SDU_LENGTH] = { .type = NLA_U32 },
-	[NL802154_SDU] = { .type = NLA_NESTED },
+	[NL802154_ATTR_SDU_LENGTH] = { .type = NLA_U32 },
+	[NL802154_ATTR_SDU] = { .type = NLA_NESTED },
+	[NL802154_ATTR_SDU_ENTRY] = { .type = NLA_U8},
 };
 
 /* message building helper */
@@ -1233,10 +1234,12 @@ static void nl802154_beacon_work( struct work_struct *work ) {
 int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
 {
 	int ret = 0;
+	int i;
 	struct sk_buff *msg;
 	void *hdr;
 	struct net *net;
 	struct nlattr *nl_pan_desc;
+	struct nlattr *nl_sdu;
 
 	printk( KERN_INFO "In nl802154_beacon_notify_indication\n");
 	printk( KERN_INFO "PortID we are sending to is: %d\n", info->snd_portid );
@@ -1279,10 +1282,24 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 	}
 	nla_nest_end( msg, nl_pan_desc );
 
-	ret = nla_put_u8( msg, NL802154_ATTR_BEACON_LQI, beacon_notify->pan_desc.lqi );
+	ret = nla_put_u8( msg, NL802154_ATTR_PEND_ADDR_SPEC, beacon_notify->pend_addr_spec );
 	if ( 0 != ret ) {
 		goto nla_put_failure;
 	}
+
+	ret = nla_put_u32( msg, NL802154_ATTR_SDU_LENGTH, beacon_notify->sdu_len);
+	if ( 0 != ret ) {
+		goto nla_put_failure;
+	}
+
+	nl_sdu = nla_nest_start( msg, NL802154_ATTR_SDU );
+	for (i = 0; i <= beacon_notify->sdu_len; i++) {
+		ret = nla_put_u8(msg, NL802154_ATTR_SDU_ENTRY, beacon_notify->sdu[i]);
+        if ( 0 != ret ) {
+            goto nla_put_failure;
+        }
+	}
+	nla_nest_end( msg, nl_sdu );
 
 	genlmsg_end( msg, hdr );
 
