@@ -425,7 +425,7 @@ static int cz_dpm_init(struct amdgpu_device *adev)
 	pi->mgcg_cgtt_local1 = 0x0;
 	pi->clock_slow_down_step = 25000;
 	pi->skip_clock_slow_down = 1;
-	pi->enable_nb_ps_policy = 1;
+	pi->enable_nb_ps_policy = 0;
 	pi->caps_power_containment = true;
 	pi->caps_cac = true;
 	pi->didt_enabled = false;
@@ -1679,25 +1679,31 @@ static int cz_dpm_unforce_dpm_levels(struct amdgpu_device *adev)
 	if (ret)
 		return ret;
 
-	DRM_INFO("DPM unforce state min=%d, max=%d.\n",
-			pi->sclk_dpm.soft_min_clk,
-			pi->sclk_dpm.soft_max_clk);
+	DRM_DEBUG("DPM unforce state min=%d, max=%d.\n",
+		  pi->sclk_dpm.soft_min_clk,
+		  pi->sclk_dpm.soft_max_clk);
 
 	return 0;
 }
 
 static int cz_dpm_force_dpm_level(struct amdgpu_device *adev,
-				enum amdgpu_dpm_forced_level level)
+				  enum amdgpu_dpm_forced_level level)
 {
 	int ret = 0;
 
 	switch (level) {
 	case AMDGPU_DPM_FORCED_LEVEL_HIGH:
+		ret = cz_dpm_unforce_dpm_levels(adev);
+		if (ret)
+			return ret;
 		ret = cz_dpm_force_highest(adev);
 		if (ret)
 			return ret;
 		break;
 	case AMDGPU_DPM_FORCED_LEVEL_LOW:
+		ret = cz_dpm_unforce_dpm_levels(adev);
+		if (ret)
+			return ret;
 		ret = cz_dpm_force_lowest(adev);
 		if (ret)
 			return ret;
@@ -1710,6 +1716,8 @@ static int cz_dpm_force_dpm_level(struct amdgpu_device *adev,
 	default:
 		break;
 	}
+
+	adev->pm.dpm.forced_level = level;
 
 	return ret;
 }
