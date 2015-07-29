@@ -205,4 +205,32 @@ rdev_ed_scan(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev
 	return ret;
 }
 
+static inline int
+rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
+				u8 channel_number, u8 channel_page, u16 coord_pan_id, u64 coord_address,
+				u8 capability_information )
+{
+	int ret = 0;
+
+	return ret;
+}
+
+static inline int
+rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
+								int (*callback)( struct sk_buf *, void *), void *arg )
+{
+	int ret = 0;
+
+	// XXX: implement me
+
+	return ret;
+}
+
+
+static inline void
+rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev, int (*callback)( struct sk_buf *, void *), void *arg )
+{
+	// XXX: implement me
+}
+
 #endif /* __CFG802154_RDEV_OPS */
