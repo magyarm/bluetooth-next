@@ -291,6 +291,8 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 channel_number, u8 channel_page,  u8 addr_mode, u16 pan_id, u64 coord_addr,
 		u8 cap_info, u64 src_addr ){
 	int ret = 0;
+	u8 cmd_frame_id = IEEE802154_CMD_ASSOCIATION_REQ;
+
 
 	return ret;
 }
