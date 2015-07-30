@@ -68,8 +68,6 @@ err_tx:
 static netdev_tx_t
 ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 {
-	printk( KERN_INFO "Inside %s\n", __FUNCTION__);
-
 	struct net_device *dev = skb->dev;
 	int ret;
 
@@ -78,7 +76,6 @@ ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 
 		put_unaligned_le16(crc, skb_put(skb, 2));
 	}
-
 
 	if (skb_cow_head(skb, local->hw.extra_tx_headroom))
 		goto err_tx;
@@ -122,7 +119,6 @@ ieee802154_monitor_start_xmit(struct sk_buff *skb, struct net_device *dev)
 netdev_tx_t
 ieee802154_subif_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(dev);
 	int rc;
 

@@ -211,6 +211,8 @@ rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_d
 				u8 capability_information )
 {
 	int ret = 0;
+
+	return ret;
 }
 
 static inline int
@@ -221,8 +223,9 @@ rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struc
 
 	// XXX: implement me
 
-	return 0;
+	return ret;
 }
+
 
 static inline void
 rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,

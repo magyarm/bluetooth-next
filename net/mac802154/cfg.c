@@ -309,11 +309,11 @@ ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
 
 static int
 ieee802154_header_create( struct sk_buff *skb,
-								struct wpan_dev *wpan_dev,
-								unsigned short type,
-								const void *daddr,
-								const void *saddr,
-								unsigned len)
+		struct wpan_dev *wpan_dev,
+		unsigned short type,
+		const void *daddr,
+		const void *saddr,
+		unsigned len)
 {
 	struct ieee802154_hdr hdr;
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
@@ -373,18 +373,12 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	struct ieee802154_addr dst_addr, src_addr;
 	unsigned char *data;
 
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
-
 	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
 
 	//Create beacon frame / payload
 	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
-
-	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
-	printk( KERN_INFO "Address of the netdev device structure: %x\n", wpan_dev->netdev );
-	printk( KERN_INFO "Address of ieee802154_local * local from wpan_phy_priv: %x\n", local );
 
 	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
@@ -417,7 +411,6 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	cb->source = src_addr;
 	cb->dest = dst_addr;
 
-	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
 	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 
@@ -428,9 +421,6 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	skb->dev = wpan_dev->netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	printk( KERN_INFO "Data bytes sent out %x, %x, %x, %x, %x, %x, %x, %x ",data[0], data[1],data[2], data[3],data[4], data[5],data[6], data[7]  );
-
-//	r = drv_xmit_async( local, skb );
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	if( 0 == r) {
 		goto out;

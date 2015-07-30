@@ -1944,12 +1944,10 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_ASSOC_REQ,
 		.doit = nl802154_assoc_req,
-		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
-		.doit = nl802154_set_beacon_indication,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
-				  NL802154_FLAG_NEED_RTNL,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+					NL802154_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL802154_CMD_ASSOC_RSP,
@@ -1957,15 +1955,23 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
-				  NL802154_FLAG_NEED_RTNL,
+					NL802154_FLAG_NEED_RTNL,
 	},
+	{
+		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
+		.doit = nl802154_set_beacon_indication,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+					NL802154_FLAG_NEED_RTNL,
+		},
 	{
 		.cmd = NL802154_CMD_ACTIVE_SCAN_REQ,
 		.doit = nl802154_ed_scan_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
-				NL802154_FLAG_NEED_RTNL,
+					NL802154_FLAG_NEED_RTNL,
 	},
 };
 
@@ -1979,4 +1985,4 @@ int nl802154_init(void)
 void nl802154_exit(void)
 {
 	genl_unregister_family(&nl802154_fam);
-};
+}
