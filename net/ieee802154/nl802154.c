@@ -28,23 +28,23 @@
 
 struct work802154 {
 	// probably should add a mutex
-    struct sk_buff *skb;
-    struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
-    int cmd; // selects which item in the union below to use
-    union {
-        // put any additional command-specific structs in here
-        // note: only for information that must be conveyed e.g.
-        // between REQ and CNF - not for the entire CNF or IND.
-        // If you can extrapolate information from rdev, wpan_dev,
-        // info, etc, do not duplicated it here.
-        struct ed_scan {
-            u8 channel_page;
-            u32 scan_channels;
-            u8 scan_duration;
-        } ed_scan;
-    } cmd_stuff;
-    struct completion completion;
-    struct delayed_work work;
+	struct sk_buff *skb;
+	struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
+	int cmd; // selects which item in the union below to use
+	union {
+		// put any additional command-specific structs in here
+		// note: only for information that must be conveyed e.g.
+		// between REQ and CNF - not for the entire CNF or IND.
+		// If you can extrapolate information from rdev, wpan_dev,
+		// info, etc, do not duplicated it here.
+		struct ed_scan {
+			u8 channel_page;
+			u32 scan_channels;
+			u8 scan_duration;
+		} ed_scan;
+	} cmd_stuff;
+	struct completion completion;
+	struct delayed_work work;
 };
 
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
@@ -1374,8 +1374,8 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
-    static const u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
-    static const u8 status = MAC_ERR_NO_ACK;
+	static const u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
+	static const u8 status = MAC_ERR_NO_ACK;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
@@ -1388,9 +1388,9 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	dev_err( &rdev->wpan_phy.dev, "%s\n", __FUNCTION__ );
 
-    rdev_deregister_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
+	rdev_deregister_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
 
-    nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
+	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1405,18 +1405,18 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	int r;
 
-    u8 channel_number;
-    u8 channel_page;
-    u8 coord_addr_mode;
-    u16 coord_pan_id;
-    u64 coord_address;
-    u8 capability_information;
-//    XXX: TODO
-//    u32 security_level;
-//    u32 key_id_mode;
-//    u64 key_source;
-//    u32 key_index;
-    u32 timeout_ms = 5000;
+	u8 channel_number;
+	u8 channel_page;
+	u8 coord_addr_mode;
+	u16 coord_pan_id;
+	u64 coord_address;
+	u8 capability_information;
+//	XXX: TODO
+//	u32 security_level;
+//	u32 key_id_mode;
+//	u64 key_source;
+//	u32 key_index;
+	u32 timeout_ms = 5000;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 //	struct net_device *dev = info->user_ptr[1];
@@ -1424,8 +1424,8 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	struct work802154 *wrk;
 
-    if ( ! (
-        info->attrs[ NL802154_ATTR_CHANNEL ] &&
+	if ( ! (
+		info->attrs[ NL802154_ATTR_CHANNEL ] &&
 		info->attrs[ NL802154_ATTR_PAGE ] &&
 		info->attrs[ NL802154_ATTR_ADDR_MODE ] &&
 		info->attrs[ NL802154_ATTR_PAN_ID ] &&
@@ -1434,84 +1434,84 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 			info->attrs[ NL802154_ATTR_EXTENDED_ADDR ]
 		) &&
 		info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ]
-    ) ) {
-    	dev_err( &rdev->wpan_phy.dev, "invalid arguments\n" );
-        r = -EINVAL;
-        goto out;
-    }
+	) ) {
+		dev_err( &rdev->wpan_phy.dev, "invalid arguments\n" );
+		r = -EINVAL;
+		goto out;
+	}
 
-    channel_number = nla_get_u8( info->attrs[ NL802154_ATTR_CHANNEL ] );
-    channel_page = nla_get_u32( info->attrs[ NL802154_ATTR_PAGE ] );
-    coord_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
-    coord_pan_id = nla_get_u8( info->attrs[ NL802154_ATTR_PAN_ID ] );
+	channel_number = nla_get_u8( info->attrs[ NL802154_ATTR_CHANNEL ] );
+	channel_page = nla_get_u32( info->attrs[ NL802154_ATTR_PAGE ] );
+	coord_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
+	coord_pan_id = nla_get_u8( info->attrs[ NL802154_ATTR_PAN_ID ] );
 
-    switch( coord_addr_mode ) {
-    case NL802154_ADDR_MODE_SHORT:
-    	if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
-    		coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
-    		break;
-    	}
-    	/* no break */
-    case NL802154_ADDR_MODE_EXT:
-    	if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
-    		coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
-    		break;
-    	}
-    	/* no break */
-    default:
-    	dev_err( &rdev->wpan_phy.dev, "invalid address / mode combination\n" );
-    	r = -EINVAL;
-    	goto out;
-    }
-    capability_information = nla_get_u8( info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] );
+	switch( coord_addr_mode ) {
+	case NL802154_ADDR_MODE_SHORT:
+		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
+			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
+			break;
+		}
+		/* no break */
+	case NL802154_ADDR_MODE_EXT:
+		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
+			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
+			break;
+		}
+		/* no break */
+	default:
+		dev_err( &rdev->wpan_phy.dev, "invalid address / mode combination\n" );
+		r = -EINVAL;
+		goto out;
+	}
+	capability_information = nla_get_u8( info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] );
 
-    if ( channel_page > IEEE802154_MAX_PAGE ) {
-        dev_err( &rdev->wpan_phy.dev, "invalid channel_page %u\n", channel_page );
-        r = -EINVAL;
-        goto out;
-    }
+	if ( channel_page > IEEE802154_MAX_PAGE ) {
+		dev_err( &rdev->wpan_phy.dev, "invalid channel_page %u\n", channel_page );
+		r = -EINVAL;
+		goto out;
+	}
 
-    if ( BIT( channel_number ) & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-    	dev_err( &rdev->wpan_phy.dev, "invalid channel_number %u\n", channel_number );
-        r = -EINVAL;
-        goto out;
-    }
+	if ( BIT( channel_number ) & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
+		dev_err( &rdev->wpan_phy.dev, "invalid channel_number %u\n", channel_number );
+		r = -EINVAL;
+		goto out;
+	}
 
-    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-    if ( NULL == wrk ) {
-        r = -ENOMEM;
-        goto out;
-    }
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+	if ( NULL == wrk ) {
+		r = -ENOMEM;
+		goto out;
+	}
 
-    wrk->cmd = NL802154_CMD_ASSOC_REQ;
-    wrk->skb = skb;
-    wrk->info = info;
+	wrk->cmd = NL802154_CMD_ASSOC_REQ;
+	wrk->skb = skb;
+	wrk->info = info;
 
-    init_completion( &wrk->completion );
-    INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
-    r = schedule_delayed_work( &wrk->work, timeout_ms ) ? 0 : -EALREADY;
-    if ( 0 != r ) {
-    	dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
-        goto free_wrk;
-    }
+	init_completion( &wrk->completion );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
+	r = schedule_delayed_work( &wrk->work, timeout_ms ) ? 0 : -EALREADY;
+	if ( 0 != r ) {
+		dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
+		goto free_wrk;
+	}
 
-    wait_for_completion( &wrk->completion );
+	wait_for_completion( &wrk->completion );
 
-    r = 0;
-    goto out;
+	r = 0;
+	goto out;
 
 free_wrk:
-    kfree( wrk );
+	kfree( wrk );
 
 out:
-    return r;
+	return r;
 }
 
 static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
 {
-    int r;
-    r = -ENOSYS;
-    return r;
+	int r;
+	r = -ENOSYS;
+	return r;
 }
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
