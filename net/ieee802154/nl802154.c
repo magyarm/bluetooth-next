@@ -1122,12 +1122,6 @@ out:
 	return r;
 }
 
-static int nl802154_add_work( struct work802154 *wrk ) {
-    int r;
-	r = schedule_work( &wrk->work );
-	return r ? 0 : -EALREADY;
-}
-
 static void nl802154_ed_scan_cnf( struct work_struct *work ) {
 
 	int r;
@@ -1241,7 +1235,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	struct sk_buff *reply;
 	void *hdr;
 
-	wrk = container_of( work, struct work802154, work );
+	wrk = container_of( to_delayed_work( work ), struct work802154, work );
 	skb = wrk->skb;
 	info = wrk->info;
 	rdev = info->user_ptr[0];
@@ -1251,7 +1245,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
 	if ( NULL == reply ) {
 		r = -ENOMEM;
-		dev_err( dev, "nlmsg_new failed (%d)\n", r );
+		dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
 		goto out;
 	}
 
@@ -1303,7 +1297,7 @@ static void nl802154_beacon_work( struct work_struct *work ) {
 	struct cfg802154_registered_device *rdev;
 	struct genl_info *info;
 
-	wrk = container_of( work, struct work802154, work );
+	wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	info = wrk->info;
 
@@ -1415,7 +1409,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 		goto out;
 	}
 
-	wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
 	wrk->skb = skb;
 	wrk->info = info;
 	wrk->cmd_stuff.ed_scan.channel_page = channel_page;
@@ -1424,15 +1417,14 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 
 	if( IEEE802154_MAC_SCAN_ED == scan_type ) {
 		wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
-		INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+		INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
 	}else if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
 		wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
-		INIT_WORK( &wrk->work, nl802154_active_scan_cnf );
+		INIT_DELAYED_WORK( &wrk->work, nl802154_active_scan_cnf );
 		printk(KERN_INFO "Adding active scan work\n");
 	}
 
 	init_completion( &wrk->completion );
-	INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
 	r = schedule_delayed_work( &wrk->work, 0 ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
 		dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
@@ -1651,12 +1643,18 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto out;
 	}
 
+out:
+	return r;
+
+}
+
 static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
 {
 	int r = 0;
 
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
+	u32 timeout_ms = 5000;
 
 	struct device *dev;
 
@@ -1689,9 +1687,8 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 	wrk->info = info;
 
 	init_completion( &wrk->completion );
-	INIT_WORK( &wrk->work, nl802154_beacon_work );
-	//schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
-	r = nl802154_add_work( wrk );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_beacon_work );
+	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
 	if ( 0 != r ) {
 		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
 		goto free_wrk;
