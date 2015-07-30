@@ -1284,17 +1284,17 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	//Yes: switch to that channel and send the beacon request frame.
 	//Schedule this work to occur again after scan_duration time.
 
-	while( !(scan_channels & ( 1 << current_channel ) ) ) {
-		unscanned_channels |= 1 << current_channel;
+	while( !(scan_channels & BIT(current_channel) ) ) {
+		unscanned_channels |= BIT(current_channel);
 		current_channel++;
 		if( IEEE802154_MAX_CHANNEL == current_channel ) {
 			break;
 		}
 	}
 
-	if( scan_channels & ( 1 << current_channel ) ) {
+	if( scan_channels & BIT(current_channel) ) {
 		printk(KERN_INFO "Scanning channel #: %d\n", i);
-		r = rdev_set_channel(rdev, channel_page, i);
+		r = rdev_set_channel(rdev, channel_page, current_channel);
 		//Send the beacon request
 		r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
 		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
