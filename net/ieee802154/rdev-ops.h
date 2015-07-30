@@ -252,6 +252,19 @@ rdev_beacon_deregister_listener(struct cfg802154_registered_device *rdev )
 }
 
 static inline int
+rdev_active_scan_register_listener(struct cfg802154_registered_device *rdev,
+		  struct wpan_dev *wpan_dev, struct genl_info *info, struct work_struct *work )
+{
+	return rdev->ops->register_active_scan_listener(&rdev->wpan_phy, wpan_dev, info, work );
+}
+
+static inline void
+rdev_beacon_deregister_listener(struct cfg802154_registered_device *rdev )
+{
+	rdev->ops->deregister_active_scan_listener(&rdev->wpan_phy );
+}
+
+static inline int
 rdev_send_beacon_command_frame( struct cfg802154_registered_device *rdev,
 			struct wpan_dev *wpan_dev, u8 cmd_frame_id )
 {

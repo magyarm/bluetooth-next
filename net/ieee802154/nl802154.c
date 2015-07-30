@@ -1272,7 +1272,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 			goto free_reply;
 		}
 
-		rdev_active_scan_register_listener(rdev, NULL, info );
+		rdev_active_scan_register_listener(rdev, NULL, info, work );
 	}
 
 	//Scanning process

@@ -308,6 +308,27 @@ ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
 }
 
 static int
+ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info, struct work_struct *work)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->active_scan_listener = info;
+	local->active_scan_work = work;
+	ret = drv_start( local );
+	return ret;
+}
+
+static int
+ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy )
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->active_scan_listener = NULL;
+	local->active_scan_work = NULL;
+	return ret;
+}
+
+static int
 ieee802154_header_create( struct sk_buff *skb,
 		struct wpan_dev *wpan_dev,
 		unsigned short type,
@@ -398,7 +419,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	src_addr.mode = IEEE802154_ADDR_NONE;
 	dst_addr.mode = IEEE802154_ADDR_SHORT;
 	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
-	dst_addr.short_addr = 0xbeef;
+	dst_addr.short_addr = IEEE802154_ADDR_BROADCAST;
 
 	cb = mac_cb_init(skb);
 	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
@@ -460,5 +481,7 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.ed_scan = ieee802154_ed_scan,
 	.register_beacon_listener = ieee802154_register_beacon_listener,
 	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
+	.active_scan_register_listener = ieee802154_register_active_scan_listener,
+	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
 	.send_beacon_command_frame = ieee802154_send_beacon_command_frame,
 };

@@ -69,6 +69,9 @@ struct cfg802154_ops {
 	int	(*register_beacon_listener)( struct wpan_phy *wpan_phy,
 					struct wpan_dev *wpan_dev, struct genl_info *info );
 	int	(*deregister_beacon_listener)( struct wpan_phy *wpan_phy );
+	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
+					struct wpan_dev *wpan_dev, struct genl_info *info, struct work_struct *work );
+	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy );
 	int	(*send_beacon_command_frame)( struct wpan_phy *wpan_phy,
 					struct wpan_dev *wpan_dev, u8 cmd_frame_id );
 };
