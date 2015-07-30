@@ -268,12 +268,11 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_SEC_KEY_SOURCE_ENTRY] = { .type = NLA_U8, },
 	[NL802154_ATTR_SEC_KEY_INDEX] = { .type = NLA_U8, },
 
-<<<<<<< HEAD
 	[NL802154_ATTR_ADDR_MODE] = { .type = NLA_U8, },
 
 	[NL802154_ATTR_ASSOC_CAP_INFO] = { .type = NLA_U8, },
 	[NL802154_ATTR_ASSOC_STATUS] = { .type = NLA_U8, },
-=======
+
 	[NL802154_ATTR_BEACON_SEQUENCE_NUMBER] = { .type = NLA_U8, },
 	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
 	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
@@ -281,7 +280,6 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_SDU_LENGTH] = { .type = NLA_U32 },
 	[NL802154_SDU] = { .type = NLA_NESTED },
 
->>>>>>> 237a94082792af5d1e76d5f02cbd638fdeddf83c
 };
 
 /* message building helper */
@@ -1460,7 +1458,6 @@ out:
 	return r;
 }
 
-<<<<<<< HEAD
 enum {
 	ASSOC_SHORT_ADDR_EXTENDED_ONLY = 0xfffe,
 	ASSOC_SHORT_ADDR_FAILURE = 0xffff,
@@ -1660,7 +1657,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		r = -EINVAL;
 		goto out;
 	}
-=======
+
 static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
 {
 	int r = 0;
@@ -1677,7 +1674,6 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 
 	printk( KERN_INFO "PortID want to send to: %d\n", info->snd_portid );
->>>>>>> 237a94082792af5d1e76d5f02cbd638fdeddf83c
 
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
 	if ( NULL == wrk ) {
@@ -1685,7 +1681,6 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 		goto out;
 	}
 
-<<<<<<< HEAD
 	wrk->cmd = NL802154_CMD_ASSOC_REQ;
 	wrk->skb = skb;
 	wrk->info = info;
@@ -1698,7 +1693,6 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 		goto free_wrk;
 	}
 
-=======
 	wrk->info = info;
 
 	init_completion( &wrk->completion );
@@ -1713,24 +1707,19 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 	// Explicitely turn the radio on
 	r = rdev_beacon_register_listener(rdev, NULL, info );
 
->>>>>>> 237a94082792af5d1e76d5f02cbd638fdeddf83c
 	wait_for_completion( &wrk->completion );
 
 	r = 0;
 	goto out;
 
 free_wrk:
-<<<<<<< HEAD
 	kfree( wrk );
 
-=======
     kfree( wrk );
->>>>>>> 237a94082792af5d1e76d5f02cbd638fdeddf83c
 out:
 	return r;
 }
 
-<<<<<<< HEAD
 static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
 {
 	int r;
@@ -1738,8 +1727,6 @@ static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
 	return r;
 }
 
-=======
->>>>>>> 237a94082792af5d1e76d5f02cbd638fdeddf83c
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
 #define NL802154_FLAG_NEED_RTNL		0x04
@@ -1955,34 +1942,30 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-<<<<<<< HEAD
 		.cmd = NL802154_CMD_ASSOC_REQ,
 		.doit = nl802154_assoc_req,
-=======
 		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
 		.doit = nl802154_set_beacon_indication,
->>>>>>> 237a94082792af5d1e76d5f02cbd638fdeddf83c
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-<<<<<<< HEAD
 		.cmd = NL802154_CMD_ASSOC_RSP,
 		.doit = nl802154_assoc_rsp,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
-=======
+	},
+	{
 		.cmd = NL802154_CMD_ACTIVE_SCAN_REQ,
 		.doit = nl802154_ed_scan_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				NL802154_FLAG_NEED_RTNL,
->>>>>>> 237a94082792af5d1e76d5f02cbd638fdeddf83c
 	},
 };
 
@@ -1996,4 +1979,4 @@ int nl802154_init(void)
 void nl802154_exit(void)
 {
 	genl_unregister_family(&nl802154_fam);
-}
+};

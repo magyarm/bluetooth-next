@@ -64,12 +64,12 @@ struct cfg802154_ops {
 					 s8 max_frame_retries);
 	int	(*set_lbt_mode)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev, bool mode);
-	int (*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 					u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
-	int (*register_beacon_listener)( struct wpan_phy *wpan_phy,
+	int	(*register_beacon_listener)( struct wpan_phy *wpan_phy,
 					struct wpan_dev *wpan_dev, struct genl_info *info );
-	int (*deregister_beacon_listener)( struct wpan_phy *wpan_phy );
-	int (*send_beacon_command_frame)( struct wpan_phy *wpan_phy,
+	int	(*deregister_beacon_listener)( struct wpan_phy *wpan_phy );
+	int	(*send_beacon_command_frame)( struct wpan_phy *wpan_phy,
 					struct wpan_dev *wpan_dev, u8 cmd_frame_id );
 };
 
