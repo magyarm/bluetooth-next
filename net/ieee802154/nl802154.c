@@ -44,6 +44,15 @@ struct work802154 {
 			u32 scan_channels;
 			u8 scan_duration;
 		} ed_scan;
+		struct active_scan {
+			u8 channel_page;
+			u32 scan_channel;
+			u8 scan_duration;
+			u8 result_list_size;
+			u32 current_channel;
+			struct sk_buff *reply;
+			void *hdr;
+		};
 	} cmd_stuff;
 	struct completion completion;
 	struct delayed_work work;
@@ -1213,7 +1222,7 @@ out:
 
 static void nl802154_active_scan_cnf( struct work_struct *work )
 {
-	int r;
+	int r = IEEE802154_SUCCESS;
 
 	struct work802154 *wrk;
 	struct sk_buff *skb;
@@ -1224,11 +1233,10 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 
 	int i;
 
-	u8 status;
-	u8 scan_type;
 	u8 channel_page;
 	u32 scan_channels;
 	u8 scan_duration;
+	u32 current_channel;
 	__le32 unscanned_channels;
 	u8 result_list_size;
 	u8 detected_category;
@@ -1242,52 +1250,78 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	dev = info->user_ptr[1];
 	wpan_dev = &rdev->wpan_phy.dev;
 
-	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-	if ( NULL == reply ) {
-		r = -ENOMEM;
-		dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+	//Get active scan variables from previous calls from the work struct
+	channel_page = wrk->cmd_stuff.active_scan.channel_page;
+	scan_channels = wrk->cmd_stuff.actibe_scan.scan_channels;
+	scan_duration = wrk->cmd_stuff.actibe_scan.scan_duration;
+	current_channel = wrk->cmd_stuff.active_scan.current_channel;
+	reply = wrk->cmd_stuff.active_scan.reply;
+
+	if( 0 == current_channel ) {
+		//Initialize the netlink reply and header on the first entry to active scan work
+		reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+		if ( NULL == reply ) {
+			r = -ENOMEM;
+			dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+			goto out;
+		}
+
+		hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
+		if ( NULL == hdr ) {
+			r = -ENOBUFS;
+			goto free_reply;
+		}
+
+		rdev_active_scan_register_listener(rdev, NULL, info );
+	}
+
+	//Scanning process
+	//Check that the current channel is selected in the scan_channels bit mask.
+	//If not add it to the unscanned channels bit mask
+	//Yes: switch to that channel and send the beacon request frame.
+	//Schedule this work to occur again after scan_duration time.
+
+	while( scan_channels & ( 1 << current_channel ) ) {
+		unscanned_channels |= 1 << current_channel;
+		current_channel++;
+	}
+
+	printk(KERN_INFO "Scanning channel #: %d\n", i);
+	r = rdev_set_channel(rdev, channel_page, i);
+	//Send the beacon request
+	r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+
+	if( IEEE802154_MAX_CHANNEL == current_channel || r != 0) {
+		//Add the remaining MLME-SCAN.confirm parameters as netlink attributes and send
+		r =
+			nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, r ) ||
+			nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
+			nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page ) ||
+			nla_put_u32( reply, NL802154_ATTR_SUPPORTED_CHANNEL, unscanned_channels ) ||
+			nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size ) ||
+			nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, detected_category );
+		if ( 0 != r ) {
+			dev_err( dev, "nla_put_failure (%d)\n", r );
+			goto nla_put_failure;
+		}
+
+		genlmsg_end( reply, hdr );
+
+		r = genlmsg_reply( reply, info );
 		goto out;
 	}
 
-	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
-	if ( NULL == hdr ) {
-		r = -ENOBUFS;
-		goto free_reply;
-	}
+	r = schedule_delayed_work( &wrk->work, timeout_ms ) ? 0 : -EALREADY;
 
-	status = IEEE802154_SUCCESS;
-
-	//Check the channel mask for which channels we want to do
-	channel_page = wrk->cmd_stuff.ed_scan.channel_page;
-	scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
-	scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
-
-	//Need to send the first part of the MLME-SCAN.confirm ( status, ScanType, ChannelPage ) here
-	//The beacon indication mechanism will send the heard beacons as they arrive in the RX path
-	//We don't send any beacons back in this or later functions. Just hold the socket open until
-	//all channels have been scanned.
-
-
-	for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
-		result_list_size += !!( scan_channels & (1 << i) );
-		rdev_beacon_register_listener(rdev, NULL, info );
-		if( scan_channels & (1 << i) ) {
-			printk(KERN_INFO "Scanning channel #: %d\n", i);
-			r = rdev_set_channel(rdev, channel_page, i);
-			//Send the beacon request
-			r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
-			//Wait scan_duration milliseconds for beacons to come in
-			msleep( scan_duration * 1000 );
-		}
-	}
-	rdev_beacon_deregister_listener( rdev );
 
 nla_put_failure:
 free_reply:
 	nlmsg_free( reply );
-out:
+complete:
+	rdev_beacon_deregister_listener( rdev );
 	complete( &wrk->completion );
 	kfree( wrk );
+out:
 	return;
 }
 
@@ -1411,15 +1445,20 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 
 	wrk->skb = skb;
 	wrk->info = info;
-	wrk->cmd_stuff.ed_scan.channel_page = channel_page;
-	wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
-	wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
 
 	if( IEEE802154_MAC_SCAN_ED == scan_type ) {
 		wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+		wrk->cmd_stuff.ed_scan.channel_page = channel_page;
+		wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
+		wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
 		INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
 	}else if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
 		wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
+		wrk->cmd_stuff.active_scan.channel_page = channel_page;
+		wrk->cmd_stuff.active_scan.scan_channels = scan_channels;
+		wrk->cmd_stuff.active_scan.scan_duration = scan_duration;
+		wrk->cmd_stuff.active_scan.result_list_size = 0; //Initalize the result list
+		wrk->cmd_stuff.active_scan.current_channel = 0;
 		INIT_DELAYED_WORK( &wrk->work, nl802154_active_scan_cnf );
 		printk(KERN_INFO "Adding active scan work\n");
 	}
