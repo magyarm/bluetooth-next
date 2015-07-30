@@ -1255,7 +1255,8 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	scan_channels = wrk->cmd_stuff.active_scan.scan_channels;
 	scan_duration = wrk->cmd_stuff.active_scan.scan_duration;
 	current_channel = wrk->cmd_stuff.active_scan.current_channel;
-	reply = wrk->cmd_stuff.active_scan.reply;
+	reply = wrk->cmd_stuff.active_scan->reply;
+	hdr  = wrk->cmd_stuff.active_scan->hdr;
 
 	if( 0 == current_channel ) {
 		//Initialize the netlink reply and header on the first entry to active scan work
@@ -1272,6 +1273,8 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 			goto free_reply;
 		}
 
+		wrk->cmd_stuff.active_scan->reply = reply;
+		wrk->cmd_stuff.actibe_scan->hdr = hdr;
 		rdev_active_scan_register_listener(rdev, NULL, info, work );
 	}
 
@@ -1281,15 +1284,25 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	//Yes: switch to that channel and send the beacon request frame.
 	//Schedule this work to occur again after scan_duration time.
 
-	while( scan_channels & ( 1 << current_channel ) ) {
+	while( !(scan_channels & ( 1 << current_channel ) ) ) {
 		unscanned_channels |= 1 << current_channel;
 		current_channel++;
+		if( IEEE802154_MAX_CHANNEL == current_channel ) {
+			break;
+		}
 	}
 
-	printk(KERN_INFO "Scanning channel #: %d\n", i);
-	r = rdev_set_channel(rdev, channel_page, i);
-	//Send the beacon request
-	r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+	if( scan_channels & ( 1 << current_channel ) ) {
+		printk(KERN_INFO "Scanning channel #: %d\n", i);
+		r = rdev_set_channel(rdev, channel_page, i);
+		//Send the beacon request
+		r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
+		r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
+		if( 0 == r ) {
+			goto out;
+		}
+	}
 
 	if( IEEE802154_MAX_CHANNEL == current_channel || r != 0) {
 		//Add the remaining MLME-SCAN.confirm parameters as netlink attributes and send
@@ -1308,21 +1321,19 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		genlmsg_end( reply, hdr );
 
 		r = genlmsg_reply( reply, info );
-		goto out;
+		goto complete;
 	}
-
-	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
 
 
 nla_put_failure:
 free_reply:
 	nlmsg_free( reply );
 complete:
-	rdev_beacon_deregister_listener( rdev );
+	rdev_active_scan_deregister_listener( rdev );
 	complete( &wrk->completion );
 	kfree( wrk );
 out:
-	return;
+	return r;
 }
 
 static void nl802154_beacon_work( struct work_struct *work ) {
