@@ -1577,20 +1577,20 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 	}
 
 	nl_pan_desc = nla_nest_start( msg, NL802154_ATTR_PAN_DESCRIPTOR );
-	if (nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SRC_ADDR_MODE, beacon_notify->pan_desc.src_addr_mode ) ||
-	    nla_put_u16( msg, NL802154_PAN_DESC_ATTR_SRC_PAN_ID, beacon_notify->pan_desc.src_pan_id) ||
-	    nla_put_u32( msg, NL802154_PAN_DESC_ATTR_SRC_ADDR, beacon_notify->pan_desc.src_addr) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_CHANNEL_NUM, beacon_notify->pan_desc.channel_num) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_CHANNEL_PAGE, beacon_notify->pan_desc.channel_page) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SUPERFRAME_SPEC, beacon_notify->pan_desc.superframe_spec) ||
-	    nla_put_u32( msg, NL802154_PAN_DESC_ATTR_GTS_PERMIT, beacon_notify->pan_desc.gts_permit) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_LQI, beacon_notify->pan_desc.lqi) ||
-        nla_put_u32( msg, NL802154_PAN_DESC_ATTR_TIME_STAMP, beacon_notify->pan_desc.time_stamp) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SEC_STATUS, beacon_notify->pan_desc.sec_status) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SEC_LEVEL, beacon_notify->pan_desc.sec_level) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_ID_MODE, beacon_notify->pan_desc.key_id_mode) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_SRC, beacon_notify->pan_desc.key_src) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_INDEX, beacon_notify->pan_desc.key_index)) {
+	if (nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify->pan_desc.src_addr_mode ) ||
+	    nla_put_u16( msg, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify->pan_desc.src_pan_id) ||
+	    nla_put_u32( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify->pan_desc.src_addr) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify->pan_desc.channel_num) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify->pan_desc.channel_page) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify->pan_desc.superframe_spec) ||
+	    nla_put_u32( msg, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify->pan_desc.gts_permit) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_LQI, beacon_notify->pan_desc.lqi) ||
+        nla_put_u32( msg, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify->pan_desc.time_stamp) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify->pan_desc.sec_status) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify->pan_desc.sec_level) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify->pan_desc.key_id_mode) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify->pan_desc.key_src) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify->pan_desc.key_index)) {
 		ret = -ENOBUFS;
 		goto free_reply;
 	}
