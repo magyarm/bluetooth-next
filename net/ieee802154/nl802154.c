@@ -1219,89 +1219,82 @@ out:
 
 static void nl802154_active_scan_cnf( struct work_struct *work )
 {
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
-   int r;
+	int r;
 
-   struct work802154 *wrk;
-   struct sk_buff *skb;
-   struct genl_info *info;
-   struct cfg802154_registered_device *rdev;
-   struct net_device *dev;
-   struct wpan_dev *wpan_dev;
+	struct work802154 *wrk;
+	struct sk_buff *skb;
+	struct genl_info *info;
+	struct cfg802154_registered_device *rdev;
+	struct net_device *dev;
+	struct wpan_dev *wpan_dev;
 
-   int i;
+	int i;
 
-   u8 status;
-   u8 scan_type;
-   u8 channel_page;
-   u32 scan_channels;
-   u8 scan_duration;
-   __le32 unscanned_channels;
-   u8 result_list_size;
-   u8 detected_category;
-   struct sk_buff *reply;
-   void *hdr;
+	u8 status;
+	u8 scan_type;
+	u8 channel_page;
+	u32 scan_channels;
+	u8 scan_duration;
+	__le32 unscanned_channels;
+	u8 result_list_size;
+	u8 detected_category;
+	struct sk_buff *reply;
+	void *hdr;
 
-   wrk = container_of( work, struct work802154, work );
-   skb = wrk->skb;
-   info = wrk->info;
-   rdev = info->user_ptr[0];
-   dev = info->user_ptr[1];
-   wpan_dev = &rdev->wpan_phy.dev;
+	wrk = container_of( work, struct work802154, work );
+	skb = wrk->skb;
+	info = wrk->info;
+	rdev = info->user_ptr[0];
+	dev = info->user_ptr[1];
+	wpan_dev = &rdev->wpan_phy.dev;
 
-   reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-   if ( NULL == reply ) {
-       r = -ENOMEM;
-       dev_err( dev, "nlmsg_new failed (%d)\n", r );
-       goto out;
-   }
+	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == reply ) {
+		r = -ENOMEM;
+		dev_err( dev, "nlmsg_new failed (%d)\n", r );
+		goto out;
+	}
 
-   hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
-   if ( NULL == hdr ) {
-       r = -ENOBUFS;
-       goto free_reply;
-   }
+	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
+	if ( NULL == hdr ) {
+		r = -ENOBUFS;
+		goto free_reply;
+	}
 
-   status = IEEE802154_SUCCESS;
+	status = IEEE802154_SUCCESS;
 
-   //Check the channel mask for which channels we want to do
-   channel_page = wrk->cmd_stuff.ed_scan.channel_page;
-   scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
-   scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
+	//Check the channel mask for which channels we want to do
+	channel_page = wrk->cmd_stuff.ed_scan.channel_page;
+	scan_channels = wrk->cmd_stuff.ed_scan.scan_channels;
+	scan_duration = wrk->cmd_stuff.ed_scan.scan_duration;
 
-   //Need to send the first part of the MLME-SCAN.confirm ( status, ScanType, ChannelPage ) here
-   //The beacon indication mechanism will send the heard beacons as they arrive in the RX path
-   //We don't send any beacons back in this or later functions. Just hold the socket open until
-   //all channels have been scanned.
+	//Need to send the first part of the MLME-SCAN.confirm ( status, ScanType, ChannelPage ) here
+	//The beacon indication mechanism will send the heard beacons as they arrive in the RX path
+	//We don't send any beacons back in this or later functions. Just hold the socket open until
+	//all channels have been scanned.
 
 
-   for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
-           result_list_size += !!( scan_channels & (1 << i) );
-           rdev_beacon_register_listener(rdev, NULL, info );
-           if( scan_channels & (1 << i) ) {
-         	  printk(KERN_INFO "Scanning channel #: %d\n", i);
-         	  //Set the phy channel to the first channel.
-         	  r = rdev_set_channel(rdev, channel_page, i);
-
-         	  while( 1 ) {
-         		  //Send the beacon request
-         		  r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
-
-         		  //Wait scan_duration milliseconds for beacons to come in
-         		  msleep( scan_duration * 1000 );
-         		  printk( KERN_INFO "While(1) around beacon send \n");
-         	  }
-           }
-       }
-   rdev_beacon_deregister_listener( rdev );
+	for( result_list_size = 0, i = 0; i < 8 * sizeof( scan_channels ) && i <= IEEE802154_MAX_CHANNEL; i++ ) {
+		result_list_size += !!( scan_channels & (1 << i) );
+		rdev_beacon_register_listener(rdev, NULL, info );
+		if( scan_channels & (1 << i) ) {
+			printk(KERN_INFO "Scanning channel #: %d\n", i);
+			r = rdev_set_channel(rdev, channel_page, i);
+			//Send the beacon request
+			r = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+			//Wait scan_duration milliseconds for beacons to come in
+			msleep( scan_duration * 1000 );
+		}
+	}
+	rdev_beacon_deregister_listener( rdev );
 
 nla_put_failure:
 free_reply:
 	nlmsg_free( reply );
 out:
-   complete( &wrk->completion );
-   kfree( wrk );
-   return;
+	complete( &wrk->completion );
+	kfree( wrk );
+	return;
 }
 
 static void nl802154_beacon_work( struct work_struct *work ) {
@@ -1946,8 +1939,8 @@ static const struct genl_ops nl802154_ops[] = {
 		.doit = nl802154_assoc_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_NETDEV |
-					NL802154_FLAG_NEED_RTNL,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL802154_CMD_ASSOC_RSP,
@@ -1955,7 +1948,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
-					NL802154_FLAG_NEED_RTNL,
+				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
@@ -1963,7 +1956,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
-					NL802154_FLAG_NEED_RTNL,
+				  NL802154_FLAG_NEED_RTNL,
 		},
 	{
 		.cmd = NL802154_CMD_ACTIVE_SCAN_REQ,
@@ -1971,7 +1964,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
-					NL802154_FLAG_NEED_RTNL,
+				  NL802154_FLAG_NEED_RTNL,
 	},
 };
 

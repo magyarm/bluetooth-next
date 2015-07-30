@@ -101,7 +101,6 @@ ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 	return NETDEV_TX_OK;
 
 err_tx:
-printk(KERN_INFO "%s err_tx\n", __FUNCTION__);
 	kfree_skb(skb);
 	return NETDEV_TX_OK;
 }
