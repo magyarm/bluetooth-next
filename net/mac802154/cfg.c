@@ -20,6 +20,8 @@
 #include "driver-ops.h"
 #include "cfg.h"
 
+int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata, struct ieee802154_hdr *hdr, const struct ieee802154_mac_cb *cb);
+
 static struct net_device *
 ieee802154_add_iface_deprecated(struct wpan_phy *wpan_phy,
 				const char *name,
@@ -286,6 +288,168 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
+static int
+ieee802154_register_beacon_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->beacon_listener = info;
+	ret = drv_start( local );
+	return ret;
+}
+
+static int
+ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->beacon_listener = NULL;
+	return ret;
+}
+
+static int
+ieee802154_header_create( struct sk_buff *skb,
+								struct wpan_dev *wpan_dev,
+								unsigned short type,
+								const void *daddr,
+								const void *saddr,
+								unsigned len)
+{
+	struct ieee802154_hdr hdr;
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	struct ieee802154_mac_cb *cb = mac_cb(skb);
+	int hlen;
+
+	if (!daddr)
+		return -EINVAL;
+
+	memset(&hdr.fc, 0, sizeof(hdr.fc));
+	hdr.fc.type = cb->type;
+	hdr.fc.security_enabled = cb->secen;
+	hdr.fc.ack_request = cb->ackreq;
+	hdr.seq = atomic_inc_return(&wpan_dev->dsn) & 0xFF;
+
+	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
+		return -EINVAL;
+
+	if (!saddr) {
+		if (wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_BROADCAST) ||
+		    wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_UNDEF) ||
+		    wpan_dev->pan_id == cpu_to_le16(IEEE802154_PANID_BROADCAST)) {
+			hdr.source.mode = IEEE802154_ADDR_LONG;
+			hdr.source.extended_addr = wpan_dev->extended_addr;
+		} else {
+			hdr.source.mode = IEEE802154_ADDR_SHORT;
+			hdr.source.short_addr = wpan_dev->short_addr;
+		}
+
+		hdr.source.pan_id = wpan_dev->pan_id;
+	} else {
+		hdr.source = *(const struct ieee802154_addr *)saddr;
+	}
+
+	hdr.dest = *(const struct ieee802154_addr *)daddr;
+
+	hlen = ieee802154_hdr_push(skb, &hdr);
+	if (hlen < 0)
+		return -EINVAL;
+
+	skb_reset_mac_header(skb);
+	skb->mac_len = hlen;
+
+	if (len > ieee802154_max_payload(&hdr))
+		return -EMSGSIZE;
+
+	return hlen;
+}
+
+static int
+ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id )
+{
+	int r = 0;
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, src_addr;
+	unsigned char *data;
+
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
+
+	//Create beacon frame / payload
+	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
+
+	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	printk( KERN_INFO "Address of the netdev device structure: %x\n", wpan_dev->netdev );
+	printk( KERN_INFO "Address of ieee802154_local * local from wpan_phy_priv: %x\n", local );
+
+	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	sdata->local = local;
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	src_addr.mode = IEEE802154_ADDR_NONE;
+	dst_addr.mode = IEEE802154_ADDR_SHORT;
+	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	dst_addr.short_addr = 0xbeef;
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = false;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = src_addr;
+	cb->dest = dst_addr;
+
+	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
+	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+
+	//Add the mac header to the data
+	r = memcpy( data, cb, size );
+	data[0] = cmd_frame_id;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	printk( KERN_INFO "Data bytes sent out %x, %x, %x, %x, %x, %x, %x, %x ",data[0], data[1],data[2], data[3],data[4], data[5],data[6], data[7]  );
+
+//	r = drv_xmit_async( local, skb );
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	if( 0 == r) {
+		goto out;
+	}
+
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
+}
+
+int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
+{
+	int ret;
+	ret = nl802154_beacon_notify_indication( beacon_notify, info );
+	return ret;
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -304,4 +468,7 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
+	.register_beacon_listener = ieee802154_register_beacon_listener,
+	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
+	.send_beacon_command_frame = ieee802154_send_beacon_command_frame,
 };

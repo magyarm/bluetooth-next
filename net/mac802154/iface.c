@@ -320,7 +320,7 @@ static int mac802154_slave_close(struct net_device *dev)
 	return 0;
 }
 
-static int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata,
+int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata,
 					 struct ieee802154_hdr *hdr,
 					 const struct ieee802154_mac_cb *cb)
 {
