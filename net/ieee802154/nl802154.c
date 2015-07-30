@@ -1398,6 +1398,7 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	int r;
 
 	u8 channel_number;
@@ -1504,7 +1505,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
-	r = schedule_delayed_work( &wrk->work, timeout_ms ) ? 0 : -EALREADY;
+	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
 		dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
 		goto free_wrk;
