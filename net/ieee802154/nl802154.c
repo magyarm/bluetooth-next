@@ -499,6 +499,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
 	CMD(ed_scan, ED_SCAN_REQ);
+	CMD(assoc_req, ASSOC_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1398,11 +1399,6 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 {
-	enum {
-		NL802154_ADDR_MODE_SHORT = 2,
-		NL802154_ADDR_MODE_EXT = 3,
-	};
-
 	int r;
 
 	u8 channel_number;
@@ -1411,6 +1407,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	u16 coord_pan_id;
 	u64 coord_address;
 	u8 capability_information;
+	u64 src_addr;
 //	XXX: TODO
 //	u32 security_level;
 //	u32 key_id_mode;
@@ -1420,7 +1417,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 //	struct net_device *dev = info->user_ptr[1];
-	//struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct wpan_dev *wpan_dev = &rdev->wpan_phy.dev;
 
 	struct work802154 *wrk;
 
@@ -1440,19 +1437,20 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto out;
 	}
 
+	src_addr = wpan_dev->extended_addr;
 	channel_number = nla_get_u8( info->attrs[ NL802154_ATTR_CHANNEL ] );
 	channel_page = nla_get_u32( info->attrs[ NL802154_ATTR_PAGE ] );
 	coord_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
 	coord_pan_id = nla_get_u8( info->attrs[ NL802154_ATTR_PAN_ID ] );
 
 	switch( coord_addr_mode ) {
-	case NL802154_ADDR_MODE_SHORT:
+	case IEEE802154_ADDR_SHORT:
 		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
 			break;
 		}
 		/* no break */
-	case NL802154_ADDR_MODE_EXT:
+	case IEEE802154_ADDR_LONG:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
 			break;
@@ -1482,6 +1480,9 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		r = -ENOMEM;
 		goto out;
 	}
+
+	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
+			capability_information , src_addr);
 
 	wrk->cmd = NL802154_CMD_ASSOC_REQ;
 	wrk->skb = skb;

@@ -286,6 +286,15 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
+static int
+ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		u8 channel_number, u8 channel_page,  u8 addr_mode, u16 pan_id, u64 coord_addr,
+		u8 cap_info, u64 src_addr ){
+	int ret = 0;
+
+	return ret;
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -304,4 +313,5 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
+	.assoc_req = ieee802154_assoc_req,
 };
