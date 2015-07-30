@@ -74,6 +74,7 @@ rdev_del_virtual_intf(struct cfg802154_registered_device *rdev,
 static inline int
 rdev_set_channel(struct cfg802154_registered_device *rdev, u8 page, u8 channel)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	int ret;
 
 	trace_802154_rdev_set_channel(&rdev->wpan_phy, page, channel);
@@ -213,8 +214,8 @@ rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_d
 	int ret = 0;
 
 	ret = rdev->ops->assoc_req( &rdev->wpan_phy, wpan_dev,
-			channel_number , channel_page,  coord_addr_mode, coord_pan_id, coord_address,
-			capability_information, src_addr );
+		channel_number , channel_page,  coord_addr_mode, coord_pan_id, coord_address,
+		capability_information, src_addr );
 
 	return ret;
 }

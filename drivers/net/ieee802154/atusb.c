@@ -363,6 +363,7 @@ static void atusb_xmit_complete(struct urb *urb)
 
 static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct atusb *atusb = hw->priv;
 	struct usb_device *usb_dev = atusb->usb_dev;
 	int ret;
@@ -384,6 +385,7 @@ static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 
 static int atusb_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct atusb *atusb = hw->priv;
 	int ret;
 

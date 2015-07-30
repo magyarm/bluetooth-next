@@ -1392,7 +1392,6 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 	rdev_deregister_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
 
 	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
-
 	complete( &wrk->completion );
 	kfree( wrk );
 }
@@ -1439,9 +1438,9 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	src_addr = wpan_dev->extended_addr;
 	channel_number = nla_get_u8( info->attrs[ NL802154_ATTR_CHANNEL ] );
-	channel_page = nla_get_u32( info->attrs[ NL802154_ATTR_PAGE ] );
+	channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
 	coord_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
-	coord_pan_id = nla_get_u8( info->attrs[ NL802154_ATTR_PAN_ID ] );
+	coord_pan_id = nla_get_u16( info->attrs[ NL802154_ATTR_PAN_ID ] );
 
 	switch( coord_addr_mode ) {
 	case IEEE802154_ADDR_SHORT:
@@ -1452,7 +1451,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		/* no break */
 	case IEEE802154_ADDR_LONG:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
-			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
+			coord_address = nla_get_u64( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
 			break;
 		}
 		/* no break */
@@ -1480,9 +1479,24 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		r = -ENOMEM;
 		goto out;
 	}
+	dev_err( &rdev->wpan_phy.dev,"sending to rdev assoc req");
+	dev_err( &rdev->wpan_phy.dev,
+			"channel number: %x\n"
+			"channel page: %x\n"
+			"coord addr mode: %x\n"
+			"coord pan id: %x\n"
+			"coord address: %llx\n"
+			"capability_information: %x\n"
+			"source address: %llx\n",
+			channel_number, channel_page,
+			coord_addr_mode, coord_pan_id,
+			coord_address, capability_information ,
+			src_addr);
 
-	//r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
-		//	capability_information , src_addr);
+	rdev_set_channel(rdev, channel_page, channel_number);
+
+	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
+			capability_information , src_addr);
 
 	wrk->cmd = NL802154_CMD_ASSOC_REQ;
 	wrk->skb = skb;

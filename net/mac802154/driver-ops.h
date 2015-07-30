@@ -18,6 +18,7 @@ drv_xmit_async(struct ieee802154_local *local, struct sk_buff *skb)
 static inline int
 drv_xmit_sync(struct ieee802154_local *local, struct sk_buff *skb)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	/* don't allow other operations while sync xmit */
 	ASSERT_RTNL();
 

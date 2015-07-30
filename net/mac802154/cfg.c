@@ -385,6 +385,9 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	data = skb_put(skb, size);
 
 	source_addr.mode = IEEE802154_ADDR_LONG;
+	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	source_addr.extended_addr = src_addr;
+
 	dst_addr.mode = addr_mode;
 	dst_addr.pan_id = coord_pan_id;
 
@@ -406,8 +409,16 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	cb->dest = dst_addr;
 
 	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
+
+	printk( KERN_INFO "Dest addr: %x\n", dst_addr.short_addr );
+	printk( KERN_INFO "Dest addr long: %x\n", dst_addr.extended_addr );
+	printk( KERN_INFO "Src addr: %x\n", source_addr.short_addr );
+	printk( KERN_INFO "Src addr long: %x\n", source_addr.extended_addr );
+
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
 	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+
+	printk( KERN_INFO "Header is created");
 
 	//Add the mac header to the data
 	r = memcpy( data, cb, size );
@@ -417,7 +428,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	skb->dev = wpan_dev->netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	printk( KERN_INFO "Data bytes sent out %x, %x, %x, %x, %x, %x, %x, %x ",data[0], data[1],data[2], data[3],data[4], data[5],data[6], data[7]  );
+	printk( KERN_INFO "Data bytes sent out %x, %x",data[0], data[1]);
 
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	if( 0 == r) {
