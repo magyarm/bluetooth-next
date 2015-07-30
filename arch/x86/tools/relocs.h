@@ -13,7 +13,6 @@
 #include <byteswap.h>
 #define USE_BSD
 #include <endian.h>
-#endif
 #include <regex.h>
 #include <tools/le_byteshift.h>
 
