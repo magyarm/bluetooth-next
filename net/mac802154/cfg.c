@@ -391,7 +391,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	if ( IEEE802154_ADDR_SHORT == addr_mode ){
 		dst_addr.short_addr = (u16*)coord_addr;
 	} else {
-		dst_addr.long_addr = coord_addr;
+		dst_addr.extended_addr = coord_addr;
 	}
 
 	cb = mac_cb_init(skb);

@@ -1281,6 +1281,7 @@ out:
 enum {
 	ASSOC_SHORT_ADDR_EXTENDED_ONLY = 0xfffe,
 	ASSOC_SHORT_ADDR_FAILURE = 0xffff,
+	ASSOC_PAN_ID_FAILURE = ASSOC_SHORT_ADDR_FAILURE,
 };
 
 enum {
@@ -1302,7 +1303,7 @@ enum {
 	MAC_ERR_INVALID_PARAMETER,
 };
 
-static void nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, u16 assoc_short_address, u8 status ) {
+static void nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, u16 assoc_short_address, u16 assoc_pan_id, u8 status ) {
 
 	int r;
 
@@ -1329,6 +1330,7 @@ static void nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, u16
 
     r =
         nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
+		nla_put_u16( reply, NL802154_ATTR_PAN_ID, assoc_pan_id ) ||
         nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
     if ( 0 != r ) {
         dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
@@ -1359,6 +1361,7 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 //	struct net_device *dev = info->user_ptr[1];
 
 	u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
+	u16 assoc_pan_id = ASSOC_PAN_ID_FAILURE;
 	u8 status = MAC_ERR_NO_DATA;
 
 	dev_info( &rdev->wpan_phy.dev, "%s\n", __FUNCTION__ );
@@ -1367,7 +1370,7 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
 	// parse data from skb_in
 
-	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
+	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, assoc_pan_id, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1376,6 +1379,7 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	static const u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
+	static const u16 assoc_pan_id = ASSOC_PAN_ID_FAILURE;
 	static const u8 status = MAC_ERR_NO_ACK;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
@@ -1391,7 +1395,7 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	rdev_deregister_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
 
-	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
+	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, assoc_pan_id, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
