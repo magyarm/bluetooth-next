@@ -20,6 +20,8 @@
 #include "driver-ops.h"
 #include "cfg.h"
 
+int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata, struct ieee802154_hdr *hdr, const struct ieee802154_mac_cb *cb);
+
 static struct net_device *
 ieee802154_add_iface_deprecated(struct wpan_phy *wpan_phy,
 				const char *name,
@@ -287,6 +289,62 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
+ieee802154_header_create( struct sk_buff *skb,
+								struct wpan_dev *wpan_dev,
+								unsigned short type,
+								const void *daddr,
+								const void *saddr,
+								unsigned len)
+{
+	struct ieee802154_hdr hdr;
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	struct ieee802154_mac_cb *cb = mac_cb(skb);
+	int hlen;
+
+	if (!daddr)
+		return -EINVAL;
+
+	memset(&hdr.fc, 0, sizeof(hdr.fc));
+	hdr.fc.type = cb->type;
+	hdr.fc.security_enabled = cb->secen;
+	hdr.fc.ack_request = cb->ackreq;
+	hdr.seq = atomic_inc_return(&wpan_dev->dsn) & 0xFF;
+
+	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
+		return -EINVAL;
+
+	if (!saddr) {
+		if (wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_BROADCAST) ||
+		    wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_UNDEF) ||
+		    wpan_dev->pan_id == cpu_to_le16(IEEE802154_PANID_BROADCAST)) {
+			hdr.source.mode = IEEE802154_ADDR_LONG;
+			hdr.source.extended_addr = wpan_dev->extended_addr;
+		} else {
+			hdr.source.mode = IEEE802154_ADDR_SHORT;
+			hdr.source.short_addr = wpan_dev->short_addr;
+		}
+
+		hdr.source.pan_id = wpan_dev->pan_id;
+	} else {
+		hdr.source = *(const struct ieee802154_addr *)saddr;
+	}
+
+	hdr.dest = *(const struct ieee802154_addr *)daddr;
+
+	hlen = ieee802154_hdr_push(skb, &hdr);
+	if (hlen < 0)
+		return -EINVAL;
+
+	skb_reset_mac_header(skb);
+	skb->mac_len = hlen;
+
+	if (len > ieee802154_max_payload(&hdr))
+		return -EMSGSIZE;
+
+	return hlen;
+}
+
+static int
 ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 channel_number, u8 channel_page,  u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
 		u8 capability_information, u64 src_addr ){
@@ -361,7 +419,6 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	printk( KERN_INFO "Data bytes sent out %x, %x, %x, %x, %x, %x, %x, %x ",data[0], data[1],data[2], data[3],data[4], data[5],data[6], data[7]  );
 
-//	r = drv_xmit_async( local, skb );
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	if( 0 == r) {
 		goto out;
