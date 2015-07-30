@@ -44,6 +44,7 @@ struct work802154 {
 			u8 scan_duration;
 		} ed_scan;
 	} cmd_stuff;
+	int completion_timeout;
 	struct completion completion;
 	struct delayed_work work;
 };
@@ -1535,7 +1536,7 @@ static void nl802154_beacon_work( struct work_struct *work ) {
 
 	rdev = info->user_ptr[0];
 
-	msleep( 10000 );
+	msleep( wrk->completion_timeout );
 
 	rdev_beacon_deregister_listener( rdev );
 
@@ -1650,12 +1651,18 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 
 	printk( KERN_INFO "PortID want to send to: %d\n", info->snd_portid );
 
+	if ( ! ( info->attrs[ NL802154_ATTR_BEACON_INDICATION_TIMEOUT ] ) ) {
+		r = -EINVAL;
+		goto out;
+	}
+
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
 	if ( NULL == wrk ) {
 		r = -ENOMEM;
 		goto out;
 	}
 
+	wrk->completion_timeout = nla_get_u32( info->attrs[ NL802154_ATTR_BEACON_INDICATION_TIMEOUT ] );
 	wrk->info = info;
 
 	init_completion( &wrk->completion );
