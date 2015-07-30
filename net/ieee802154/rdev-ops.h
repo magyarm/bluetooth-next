@@ -259,7 +259,7 @@ rdev_active_scan_register_listener(struct cfg802154_registered_device *rdev,
 }
 
 static inline void
-rdev_beacon_deregister_listener(struct cfg802154_registered_device *rdev )
+rdev_active_scan_deregister_listener(struct cfg802154_registered_device *rdev )
 {
 	rdev->ops->deregister_active_scan_listener(&rdev->wpan_phy );
 }

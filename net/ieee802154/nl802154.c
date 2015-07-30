@@ -46,13 +46,13 @@ struct work802154 {
 		} ed_scan;
 		struct active_scan {
 			u8 channel_page;
-			u32 scan_channel;
+			u32 scan_channels;
 			u8 scan_duration;
 			u8 result_list_size;
 			u32 current_channel;
 			struct sk_buff *reply;
 			void *hdr;
-		};
+		} active_scan;
 	} cmd_stuff;
 	struct completion completion;
 	struct delayed_work work;
@@ -1252,8 +1252,8 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 
 	//Get active scan variables from previous calls from the work struct
 	channel_page = wrk->cmd_stuff.active_scan.channel_page;
-	scan_channels = wrk->cmd_stuff.actibe_scan.scan_channels;
-	scan_duration = wrk->cmd_stuff.actibe_scan.scan_duration;
+	scan_channels = wrk->cmd_stuff.active_scan.scan_channels;
+	scan_duration = wrk->cmd_stuff.active_scan.scan_duration;
 	current_channel = wrk->cmd_stuff.active_scan.current_channel;
 	reply = wrk->cmd_stuff.active_scan.reply;
 
@@ -1301,7 +1301,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 			nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size ) ||
 			nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, detected_category );
 		if ( 0 != r ) {
-			dev_err( dev, "nla_put_failure (%d)\n", r );
+			dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
 			goto nla_put_failure;
 		}
 
@@ -1311,7 +1311,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		goto out;
 	}
 
-	r = schedule_delayed_work( &wrk->work, timeout_ms ) ? 0 : -EALREADY;
+	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
 
 
 nla_put_failure:

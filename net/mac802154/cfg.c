@@ -481,7 +481,7 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.ed_scan = ieee802154_ed_scan,
 	.register_beacon_listener = ieee802154_register_beacon_listener,
 	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
-	.active_scan_register_listener = ieee802154_register_active_scan_listener,
+	.register_active_scan_listener = ieee802154_register_active_scan_listener,
 	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
 	.send_beacon_command_frame = ieee802154_send_beacon_command_frame,
 };
