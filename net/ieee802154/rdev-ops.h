@@ -234,4 +234,32 @@ rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, str
 	// XXX: implement me
 }
 
+static inline int
+rdev_disassoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
+				u16 device_pan_id, u64 device_address, u8 disassociate_reason,
+				u8 tx_indirect )
+{
+	int ret = 0;
+
+	return ret;
+}
+
+static inline int
+rdev_register_disassoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
+								void (*callback)( struct sk_buff *, void *), void *arg )
+{
+	int ret = 0;
+
+	// XXX: implement me
+
+	return ret;
+}
+
+static inline void
+rdev_deregister_disassoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
+								void (*callback)( struct sk_buff *, void *), void *arg )
+{
+	// XXX: implement me
+}
+
 #endif /* __CFG802154_RDEV_OPS */

@@ -42,6 +42,10 @@ struct work802154 {
 			u32 scan_channels;
 			u8 scan_duration;
 		} ed_scan;
+		struct disassoc {
+			u16 device_panid;
+			u64 device_address;
+		} disassoc;
 	} cmd_stuff;
 	struct completion completion;
 	struct delayed_work work;
@@ -270,6 +274,11 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 
 	[NL802154_ATTR_ASSOC_CAP_INFO] = { .type = NLA_U8, },
 	[NL802154_ATTR_ASSOC_STATUS] = { .type = NLA_U8, },
+
+	[NL802154_ATTR_DISASSOC_REASON] = { .type = NLA_U8, },
+	[NL802154_ATTR_DISASSOC_TX_INDIRECT] = { .type = NLA_U8, },
+	[NL802154_ATTR_DISASSOC_STATUS] = { .type = NLA_U8, },
+	[NL802154_ATTR_DISASSOC_TIMEOUT_MS] = { .type = NLA_U16, },
 };
 
 /* message building helper */
@@ -1514,6 +1523,210 @@ static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
 	return r;
 }
 
+static inline bool is_extended_address( u64 addr ) {
+	static const u64 mask = ~((1 << 16) - 1);
+	return mask & addr;
+}
+
+static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, u8 status, u16 device_panid, u64 device_address ) {
+
+	int r;
+
+//	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+
+	char device_addr_buf[32];
+    struct sk_buff *reply;
+    void *hdr;
+
+	dev_info( &dev->dev, "%s: status: 0x%02x, device_panid: 0x%04x, device_address: %s\n", __FUNCTION__, status, device_panid, device_addr_buf );
+
+    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+    if ( NULL == reply ) {
+        r = -ENOMEM;
+        dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+        goto out;
+    }
+
+    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_DISASSOC_CNF );
+    if ( NULL == hdr ) {
+        r = -ENOBUFS;
+        goto free_reply;
+    }
+
+    r =
+        nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status ) ||
+        nla_put_u16( reply, NL802154_ATTR_PAN_ID, device_panid ) ||
+		(
+			( is_extended_address( device_address ) && nla_put_u64( reply, NL802154_ATTR_EXTENDED_ADDR, device_address ) ) ||
+			( !is_extended_address( device_address ) && nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, (u16)device_address ) )
+		);
+    if ( 0 != r ) {
+        dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+        goto nla_put_failure;
+    }
+
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );
+    if ( 0 != r ) {
+    	dev_err( &dev->dev, "genlmsg_reply failed (%d)\n", r );
+    }
+    goto out;
+
+nla_put_failure:
+free_reply:
+    nlmsg_free( reply );
+out:
+    return;
+}
+
+static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) {
+
+	struct work_struct *work = (struct work_struct *)arg;
+	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
+
+	struct genl_info *info = wrk->info;
+	//struct sk_buff *skb_out = wrk->skb;
+
+//	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+
+	u8 status = MAC_ERR_NO_DATA;
+
+	dev_info( &dev->dev, "%s\n", __FUNCTION__ );
+
+	cancel_delayed_work( &wrk->work );
+
+	// parse data from skb_in
+
+	nl802154_disassoc_cnf( wrk->skb, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
+
+	complete( &wrk->completion );
+	kfree( wrk );
+}
+
+static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
+
+	static const u8 status = MAC_ERR_NO_ACK;
+
+	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
+
+	struct genl_info *info = wrk->info;
+	//struct sk_buff *skb_out = wrk->skb;
+
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+
+	dev_err( &dev->dev, "%s\n", __FUNCTION__ );
+
+	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, (void *) wrk );
+
+	nl802154_disassoc_cnf( wrk->skb, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
+
+	complete( &wrk->completion );
+	kfree( wrk );
+}
+
+static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
+{
+	enum {
+		NL802154_ADDR_MODE_SHORT = 2,
+		NL802154_ADDR_MODE_EXT = 3,
+	};
+
+	int r;
+
+	u8 device_addr_mode;
+	u16 device_panid;
+	u64 device_address;
+	u8 disassociate_reason;
+	u8 tx_indirect;
+	u16 timeout_ms;
+//	XXX: TODO
+//	u32 security_level;
+//	u32 key_id_mode;
+//	u64 key_source;
+//	u32 key_index;
+
+//	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+	//struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+
+	struct work802154 *wrk;
+
+	if ( ! (
+		info->attrs[ NL802154_ATTR_ADDR_MODE ] &&
+		info->attrs[ NL802154_ATTR_PAN_ID ] &&
+		(
+			info->attrs[ NL802154_ATTR_SHORT_ADDR ] ||
+			info->attrs[ NL802154_ATTR_EXTENDED_ADDR ]
+		) &&
+		info->attrs[ NL802154_ATTR_DISASSOC_REASON ] &&
+		info->attrs[ NL802154_ATTR_DISASSOC_TX_INDIRECT ] &&
+		info->attrs[ NL802154_ATTR_DISASSOC_TIMEOUT_MS ]
+	) ) {
+		dev_err( &dev->dev, "invalid arguments\n" );
+		r = -EINVAL;
+		goto out;
+	}
+
+	device_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
+	device_panid = nla_get_u16( info->attrs[ NL802154_ATTR_PAN_ID ] );
+	switch( device_addr_mode ) {
+	case NL802154_ADDR_MODE_SHORT:
+		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
+			device_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
+			break;
+		}
+		/* no break */
+	case NL802154_ADDR_MODE_EXT:
+		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
+			device_address = nla_get_u64( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
+			break;
+		}
+		/* no break */
+	default:
+		r = -EINVAL;
+		goto out;
+	}
+	disassociate_reason = nla_get_u8( info->attrs[ NL802154_ATTR_DISASSOC_REASON ] );
+	tx_indirect = nla_get_u8( info->attrs[ NL802154_ATTR_DISASSOC_TX_INDIRECT ] );
+	timeout_ms = nla_get_u16( info->attrs[ NL802154_ATTR_DISASSOC_TIMEOUT_MS ] );
+
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+	if ( NULL == wrk ) {
+		r = -ENOMEM;
+		goto out;
+	}
+
+	wrk->cmd = NL802154_CMD_DISASSOC_REQ;
+	wrk->skb = skb;
+	wrk->info = info;
+	wrk->cmd_stuff.disassoc.device_panid = device_panid;
+	wrk->cmd_stuff.disassoc.device_address = device_address;
+
+	init_completion( &wrk->completion );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_disassoc_req_timeout );
+	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "schedule_delayed_work failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	wait_for_completion( &wrk->completion );
+
+	r = 0;
+	goto out;
+
+free_wrk:
+	kfree( wrk );
+
+out:
+	return r;
+}
+
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
 #define NL802154_FLAG_NEED_RTNL		0x04
@@ -1739,6 +1952,14 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_ASSOC_RSP,
 		.doit = nl802154_assoc_rsp,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_DISASSOC_REQ,
+		.doit = nl802154_disassoc_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
