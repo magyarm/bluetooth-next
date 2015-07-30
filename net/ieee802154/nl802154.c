@@ -1565,7 +1565,7 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 		goto out;
 	}
 
-	hdr = nl802154hdr_put( msg, info->snd_portid, info->snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	hdr = nl802154hdr_put( msg, info->snd_portid, info->snd_seq, 0, NL802154_CMD_SET_BEACON_NOTIFY_IND );
 	if ( NULL == hdr ) {
 		ret = -ENOBUFS;
 		goto free_reply;
@@ -1634,7 +1634,7 @@ out:
 	return ret;
 }
 
-static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
+static int nl802154_get_beacon_indication( struct sk_buff *skb, struct genl_info *info )
 {
 	int r = 0;
 
@@ -1924,8 +1924,8 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
-		.doit = nl802154_set_beacon_indication,
+		.cmd = NL802154_CMD_GET_BEACON_NOTIFY,
+		.doit = nl802154_get_beacon_indication,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
