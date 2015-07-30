@@ -212,8 +212,6 @@ rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_d
 {
 	int ret = 0;
 
-	return ret;
-}
 
 static inline int
 rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
@@ -223,15 +221,42 @@ rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struc
 
 	// XXX: implement me
 
-	return ret;
+	return 0;
 }
-
 
 static inline void
 rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
 								void (*callback)( struct sk_buff *, void *), void *arg )
 {
 	// XXX: implement me
+}
+
+static inline int
+rdev_beacon_register_listener(struct cfg802154_registered_device *rdev,
+		  struct wpan_dev *wpan_dev, struct genl_info *info )
+{
+	int ret = 0;
+
+	ret = rdev->ops->register_beacon_listener(&rdev->wpan_phy, wpan_dev, info );
+
+	return ret;
+}
+
+static inline void
+rdev_beacon_deregister_listener(struct cfg802154_registered_device *rdev )
+{
+	rdev->ops->deregister_beacon_listener(&rdev->wpan_phy );
+}
+
+static inline int
+rdev_send_beacon_command_frame( struct cfg802154_registered_device *rdev,
+			struct wpan_dev *wpan_dev, u8 cmd_frame_id )
+{
+	int r = 0;
+
+	r = rdev->ops->send_beacon_command_frame( &rdev->wpan_phy, wpan_dev, cmd_frame_id );
+
+	return r;
 }
 
 #endif /* __CFG802154_RDEV_OPS */

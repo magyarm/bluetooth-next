@@ -29,12 +29,121 @@
 
 #include "ieee802154_i.h"
 
+struct workbeaconreceive {
+	struct ieee802154_beacon_indication ind;
+	struct genl_info *beacon_listener;
+	struct work_struct work;
+};
+
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
+	pr_debug("received beacon packet via interface %s\n", skb->dev->name);
+
 	return netif_receive_skb(skb);
+}
+
+static void rx_receive_work( struct work_struct *work )
+{
+	struct workbeaconreceive *wrk;
+
+	wrk = container_of( work, struct workbeaconreceive, work );
+
+	cfg802154_inform_beacon(&wrk->ind, wrk->beacon_listener);
+
+	kfree( wrk );
+	return;
+}
+
+static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct genl_info *info)
+{
+	int ret = 0;
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb->protocol = htons(ETH_P_IEEE802154);
+	struct workbeaconreceive *wrk;
+
+   wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+   if ( NULL == wrk ) {
+       ret = -ENOMEM;
+       goto out;
+   }
+
+    struct ieee802154_beacon_indication ind;
+
+	/* Lets start parsing beacon packet here.
+	 * Data packets are processed by netif_receive_skb().
+	 * Not sure if beacon packets need any processing present in netif_receive_skb()
+	 */
+
+
+	/* Step 1: Extract the following beacon data.
+	 *
+	 * Beacon indication contains the following data:
+	 * BSN :
+	 *       desc: beacon sequence number
+	 *       type: uint8_t
+	 * PAN descriptor :
+	 *       CoordAddrMode:
+	 *            desc:
+	 *            type: enum
+	 *       CoordPanId:
+	 *            desc: PanID of the coordinator
+	 *            type:
+	 *       Channel Number:
+	 *            desc:
+	 *            type:
+	 *       Channel Page:
+	 *            desc:
+	 *            type:
+	 *       Superframe Spec:
+	 *            desc:
+	 *            type:
+	 *       GTP Permit:
+	 *            desc:
+	 *            type:
+	 *       Link Quality:
+	 *            desc:
+	 *            type: integer
+	 *       Timestamp
+	 *            desc:
+	 *            type: integer
+	 *
+	 * PendAddrSpec:
+	 *       desc: Beacon pending address specification (?)
+	 *       type: bitfield
+	 *
+	 * AddrList:
+	 *
+	 * sduLength:
+	 *       desc: Number of octets (bytes?) contained in the beacon payload
+	 *
+	 * sdu:
+	 *       desc: Set of octets (bytes?) comprising the beacon payload
+	 *
+	 */
+
+	//The addressing fields shall comprise only the source address fields.
+	//The Source PAN Identifier and Source Address fields shall contain the PAN identifier and address,
+	//respectively, of the device transmitting the beacon.
+
+    ind.bsn = hdr->seq;
+
+    printk( KERN_INFO "Beacon Sequence Number received: %x", ind.bsn );
+
+	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
+	 * where it can be accessed via netlink
+	 */
+    wrk->ind = ind;
+    wrk->beacon_listener = info;
+
+    INIT_WORK( &wrk->work, rx_receive_work );
+
+    ret = schedule_work( &wrk->work );
+
+out:
+	return ret;
 }
 
 static int
@@ -45,7 +154,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	__le16 span, sshort;
 	int rc;
 
-	pr_debug("getting packet via slave interface %s\n", sdata->dev->name);
+	dev_err( &(wpan_dev->netdev->dev), "getting packet via slave interface %s\n", sdata->dev->name);
+
+	printk( KERN_INFO "Frame Type received (type = %d)\n", mac_cb(skb)->type);
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -96,9 +207,17 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	sdata->dev->stats.rx_packets++;
 	sdata->dev->stats.rx_bytes += skb->len;
 
-	switch (mac_cb(skb)->type) {
+	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
+		printk( KERN_INFO "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
+	case IEEE802154_FC_TYPE_BEACON:
+		printk( KERN_INFO "beacon listener address: %x\n", sdata->local->beacon_listener );
+		if( sdata->local->beacon_listener ) {
+			printk( KERN_INFO "Received Beacon Frame Control");
+			return ieee802154_deliver_bcn(skb, hdr, sdata->local->beacon_listener);
+		}
+		break;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);

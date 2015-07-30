@@ -23,6 +23,7 @@
 #include <linux/bug.h>
 
 #include <net/nl802154.h>
+#include <net/genetlink.h>
 
 struct wpan_phy;
 struct wpan_phy_cca;
@@ -63,8 +64,13 @@ struct cfg802154_ops {
 					 s8 max_frame_retries);
 	int	(*set_lbt_mode)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev, bool mode);
-	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-	            u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
+	int (*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+					u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
+	int (*register_beacon_listener)( struct wpan_phy *wpan_phy,
+					struct wpan_dev *wpan_dev, struct genl_info *info );
+	int (*deregister_beacon_listener)( struct wpan_phy *wpan_phy );
+	int (*send_beacon_command_frame)( struct wpan_phy *wpan_phy,
+					struct wpan_dev *wpan_dev, u8 cmd_frame_id );
 };
 
 static inline bool
@@ -229,5 +235,7 @@ static inline const char *wpan_phy_name(struct wpan_phy *phy)
 {
 	return dev_name(&phy->dev);
 }
+
+int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info );
 
 #endif /* __NET_CFG802154_H */
