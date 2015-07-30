@@ -1287,6 +1287,11 @@ out:
 }
 
 enum {
+	NL802154_ADDR_SHORT = 2,
+	NL802154_ADDR_EXT = 3,
+};
+
+enum {
 	ASSOC_SHORT_ADDR_EXTENDED_ONLY = 0xfffe,
 	ASSOC_SHORT_ADDR_FAILURE = 0xffff,
 };
@@ -1407,11 +1412,6 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 {
-	enum {
-		NL802154_ADDR_MODE_SHORT = 2,
-		NL802154_ADDR_MODE_EXT = 3,
-	};
-
 	int r;
 
 	u8 channel_number;
@@ -1455,13 +1455,13 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	coord_pan_id = nla_get_u8( info->attrs[ NL802154_ATTR_PAN_ID ] );
 
 	switch( coord_addr_mode ) {
-	case NL802154_ADDR_MODE_SHORT:
+	case NL802154_ADDR_SHORT:
 		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
 			break;
 		}
 		/* no break */
-	case NL802154_ADDR_MODE_EXT:
+	case NL802154_ADDR_EXT:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
 			break;
@@ -1528,6 +1528,9 @@ static inline bool is_extended_address( u64 addr ) {
 	return mask & addr;
 }
 
+#ifndef PRIx64
+#define PRIx64 "llx"
+#endif
 static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, u8 status, u16 device_panid, u64 device_address ) {
 
 	int r;
@@ -1536,49 +1539,56 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 	struct net_device *dev = info->user_ptr[1];
 
 	char device_addr_buf[32];
-    struct sk_buff *reply;
-    void *hdr;
+	struct sk_buff *reply;
+	void *hdr;
+
+	if ( is_extended_address( device_address ) ) {
+		snprintf( device_addr_buf, sizeof( device_addr_buf ), "0x%0" PRIx64, device_address );
+	} else {
+		snprintf( device_addr_buf, sizeof( device_addr_buf ), "0x%04x", (u16)device_address );
+	}
 
 	dev_info( &dev->dev, "%s: status: 0x%02x, device_panid: 0x%04x, device_address: %s\n", __FUNCTION__, status, device_panid, device_addr_buf );
 
-    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-    if ( NULL == reply ) {
-        r = -ENOMEM;
-        dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
-        goto out;
-    }
+	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == reply ) {
+		r = -ENOMEM;
+		dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+		goto out;
+	}
 
-    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_DISASSOC_CNF );
-    if ( NULL == hdr ) {
-        r = -ENOBUFS;
-        goto free_reply;
-    }
+	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_DISASSOC_CNF );
+	if ( NULL == hdr ) {
+		r = -ENOBUFS;
+		goto free_reply;
+	}
 
-    r =
-        nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status ) ||
-        nla_put_u16( reply, NL802154_ATTR_PAN_ID, device_panid ) ||
+	r =
+		nla_put_u8( reply, NL802154_ATTR_DISASSOC_STATUS, status ) ||
+		nla_put_u16( reply, NL802154_ATTR_ADDR_MODE, is_extended_address( device_address ) ? NL802154_ADDR_EXT : NL802154_ADDR_SHORT ) ||
+		nla_put_u16( reply, NL802154_ATTR_PAN_ID, device_panid ) ||
 		(
 			( is_extended_address( device_address ) && nla_put_u64( reply, NL802154_ATTR_EXTENDED_ADDR, device_address ) ) ||
 			( !is_extended_address( device_address ) && nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, (u16)device_address ) )
 		);
-    if ( 0 != r ) {
-        dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
-        goto nla_put_failure;
-    }
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+		goto nla_put_failure;
+	}
 
-    genlmsg_end( reply, hdr );
+	genlmsg_end( reply, hdr );
 
-    r = genlmsg_reply( reply, info );
-    if ( 0 != r ) {
-    	dev_err( &dev->dev, "genlmsg_reply failed (%d)\n", r );
-    }
-    goto out;
+	r = genlmsg_reply( reply, info );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "genlmsg_reply failed (%d)\n", r );
+	}
+	goto out;
 
 nla_put_failure:
 free_reply:
-    nlmsg_free( reply );
+	nlmsg_free( reply );
 out:
-    return;
+	return;
 }
 
 static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) {
