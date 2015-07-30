@@ -288,13 +288,90 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 static int
 ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-		u8 channel_number, u8 channel_page,  u8 addr_mode, u16 pan_id, u64 coord_addr,
-		u8 cap_info, u64 src_addr ){
-	int ret = 0;
-	u8 cmd_frame_id = IEEE802154_CMD_ASSOCIATION_REQ;
+		u8 channel_number, u8 channel_page,  u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
+		u8 capability_information, u64 src_addr ){
+
+	int r = 0;
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, source_addr;
+	unsigned char *data;
+
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
+
+	//Create beacon frame / payload
+	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	printk( KERN_INFO "Address of the netdev device structure: %x\n", wpan_dev->netdev );
+	printk( KERN_INFO "Address of ieee802154_local * local from wpan_phy_priv: %x\n", local );
+
+	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	sdata->local = local;
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	source_addr.mode = IEEE802154_ADDR_LONG;
+	dst_addr.mode = addr_mode;
+	dst_addr.pan_id = coord_pan_id;
+
+	if ( IEEE802154_ADDR_SHORT == addr_mode ){
+		dst_addr.short_addr = (u16*)coord_addr;
+	} else {
+		dst_addr.long_addr = coord_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = false;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = source_addr;
+	cb->dest = dst_addr;
+
+	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
+	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+
+	//Add the mac header to the data
+	r = memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_ASSOCIATION_REQ;
+	data[1] = capability_information;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	printk( KERN_INFO "Data bytes sent out %x, %x, %x, %x, %x, %x, %x, %x ",data[0], data[1],data[2], data[3],data[4], data[5],data[6], data[7]  );
+
+//	r = drv_xmit_async( local, skb );
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	if( 0 == r) {
+		goto out;
+	}
 
 
-	return ret;
+error:
+	kfree_skb(skb);
+out:
+	return r;
 }
 
 const struct cfg802154_ops mac802154_config_ops = {

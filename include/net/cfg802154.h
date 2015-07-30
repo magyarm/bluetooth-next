@@ -66,8 +66,8 @@ struct cfg802154_ops {
 	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	            u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 	int (*assoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-				u8 channel_number, u8 channel_page,  u8 addr_mode, u16 pan_id, u64 coord_addr,
-				u8 cap_info, u64 src_addr );
+				u8 channel_number, u8 channel_page,  u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
+				u8 capability_information, u64 src_addr );
 };
 
 static inline bool
