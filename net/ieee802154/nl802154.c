@@ -1424,21 +1424,21 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
 
 	if( IEEE802154_MAC_SCAN_ED == scan_type ) {
-	 wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
-   	 INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
-    } else if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
-   	 wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
-   	 INIT_WORK( &wrk->work, nl802154_active_scan_cnf );
-   	 printk(KERN_INFO "Adding active scan work\n");
-    }
+		wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+		INIT_WORK( &wrk->work, nl802154_ed_scan_cnf );
+	}else if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
+		wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
+		INIT_WORK( &wrk->work, nl802154_active_scan_cnf );
+		printk(KERN_INFO "Adding active scan work\n");
+	}
 
-    init_completion( &wrk->completion );
-    INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
-    r = schedule_delayed_work( &wrk->work, 0 ) ? 0 : -EALREADY;
-    if ( 0 != r ) {
-        dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
-        goto free_wrk;
-    }
+	init_completion( &wrk->completion );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
+	r = schedule_delayed_work( &wrk->work, 0 ) ? 0 : -EALREADY;
+	if ( 0 != r ) {
+		dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
+		goto free_wrk;
+	}
 
 	wait_for_completion( &wrk->completion );
 
