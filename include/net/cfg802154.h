@@ -63,7 +63,7 @@ struct cfg802154_ops {
 					 s8 max_frame_retries);
 	int	(*set_lbt_mode)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev, bool mode);
-	int (*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	            u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 };
 
