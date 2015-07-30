@@ -404,7 +404,7 @@ static int atusb_ed(struct ieee802154_hw *hw, u8 *level)
 	struct usb_device *usb_dev = atusb->usb_dev;
 	int ret;
 	int p;
-	static const unsigned nlevels = 1 << 8 * sizeof( u8 );
+	static const unsigned nlevels = 1 << 8 * sizeof( *level );
 	static const unsigned scale_factor = nlevels / RSSI_MAX_VAL;
 	static const unsigned max_level = scale_factor * RSSI_MAX_VAL;
 
