@@ -296,6 +296,7 @@ ieee802154_header_create( struct sk_buff *skb,
 								const void *saddr,
 								unsigned len)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct ieee802154_hdr hdr;
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
 	struct ieee802154_mac_cb *cb = mac_cb(skb);
@@ -308,6 +309,10 @@ ieee802154_header_create( struct sk_buff *skb,
 	hdr.fc.type = cb->type;
 	hdr.fc.security_enabled = cb->secen;
 	hdr.fc.ack_request = cb->ackreq;
+
+	printk(KERN_INFO "%x", wpan_dev);
+	printk(KERN_INFO "%x", atomic_inc_return(&wpan_dev->dsn));
+
 	hdr.seq = atomic_inc_return(&wpan_dev->dsn) & 0xFF;
 
 	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
@@ -342,6 +347,7 @@ ieee802154_header_create( struct sk_buff *skb,
 		return -EMSGSIZE;
 
 	return hlen;
+
 }
 
 static int
@@ -399,7 +405,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	cb = mac_cb_init(skb);
 	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
-	cb->ackreq = false;
+	cb->ackreq = true;
 
 	cb->secen = false;
 	cb->secen_override = false;
@@ -416,12 +422,12 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	printk( KERN_INFO "Src addr long: %x\n", source_addr.extended_addr );
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+	ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
 
 	printk( KERN_INFO "Header is created");
 
 	//Add the mac header to the data
-	r = memcpy( data, cb, size );
+	memcpy( data, cb, size );
 	data[0] = IEEE802154_CMD_ASSOCIATION_REQ;
 	data[1] = capability_information;
 
@@ -431,15 +437,19 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	printk( KERN_INFO "Data bytes sent out %x, %x",data[0], data[1]);
 
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
-	if( 0 == r) {
-		goto out;
+
+	printk( KERN_INFO "r value is %x", r );
+
+	if( 0 != r ) {
+		goto error;
 	}
 
+out:
+	return r;
 
 error:
 	kfree_skb(skb);
-out:
-	return r;
+	goto out;
 }
 
 const struct cfg802154_ops mac802154_config_ops = {

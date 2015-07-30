@@ -1499,6 +1499,8 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
 			capability_information , src_addr);
 
+	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
+
 	wrk->cmd = NL802154_CMD_ASSOC_REQ;
 	wrk->skb = skb;
 	wrk->info = info;
