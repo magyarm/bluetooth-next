@@ -14,6 +14,7 @@
  */
 
 #include <linux/rtnetlink.h>
+#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
@@ -270,6 +271,14 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 
 	[NL802154_ATTR_ASSOC_CAP_INFO] = { .type = NLA_U8, },
 	[NL802154_ATTR_ASSOC_STATUS] = { .type = NLA_U8, },
+
+	[NL802154_ATTR_BEACON_SEQUENCE_NUMBER] = { .type = NLA_U8, },
+	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
+	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
+	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
+	[NL802154_ATTR_SDU_LENGTH] = { .type = NLA_U32 },
+	[NL802154_ATTR_SDU] = { .type = NLA_NESTED },
+	[NL802154_ATTR_SDU_ENTRY] = { .type = NLA_U8},
 };
 
 /* message building helper */
@@ -1112,6 +1121,12 @@ out:
 	return r;
 }
 
+static int nl802154_add_work( struct work802154 *wrk ) {
+    int r;
+	r = schedule_work( &wrk->work );
+	return r ? 0 : -EALREADY;
+}
+
 static void nl802154_ed_scan_cnf( struct work_struct *work ) {
 
 	int r;
@@ -1394,7 +1409,6 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	complete( &wrk->completion );
 	kfree( wrk );
-}
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 {
@@ -1511,6 +1525,170 @@ static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
 {
 	int r;
 	r = -ENOSYS;
+	return r;
+}
+
+static void nl802154_beacon_work( struct work_struct *work ) {
+
+	struct work802154 *wrk;
+	struct cfg802154_registered_device *rdev;
+	struct genl_info *info;
+
+	wrk = container_of( work, struct work802154, work );
+
+	info = wrk->info;
+
+	rdev = info->user_ptr[0];
+
+	msleep( 10000 );
+
+	rdev_beacon_deregister_listener( rdev );
+
+	complete( &wrk->completion );
+	kfree( wrk );
+	return;
+}
+
+int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
+{
+	int ret = 0;
+	int i;
+	struct sk_buff *msg;
+	void *hdr;
+	struct net *net;
+	struct nlattr *nl_pan_desc;
+	struct nlattr *nl_sdu;
+
+	printk( KERN_INFO "In nl802154_beacon_notify_indication\n");
+	printk( KERN_INFO "PortID we are sending to is: %d\n", info->snd_portid );
+	printk( KERN_INFO "Info address: %p\n", info );
+
+	msg = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == msg ) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	hdr = nl802154hdr_put( msg, info->snd_portid, info->snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	if ( NULL == hdr ) {
+		ret = -ENOBUFS;
+		goto free_reply;
+	}
+
+	ret = nla_put_u8( msg, NL802154_ATTR_BEACON_SEQUENCE_NUMBER, beacon_notify->bsn );
+	if ( 0 != ret ) {
+		goto nla_put_failure;
+	}
+
+	nl_pan_desc = nla_nest_start( msg, NL802154_ATTR_PAN_DESCRIPTOR );
+	if (nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SRC_ADDR_MODE, beacon_notify->pan_desc.src_addr_mode ) ||
+	    nla_put_u16( msg, NL802154_PAN_DESC_ATTR_SRC_PAN_ID, beacon_notify->pan_desc.src_pan_id) ||
+	    nla_put_u32( msg, NL802154_PAN_DESC_ATTR_SRC_ADDR, beacon_notify->pan_desc.src_addr) ||
+	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_CHANNEL_NUM, beacon_notify->pan_desc.channel_num) ||
+	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_CHANNEL_PAGE, beacon_notify->pan_desc.channel_page) ||
+	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SUPERFRAME_SPEC, beacon_notify->pan_desc.superframe_spec) ||
+	    nla_put_u32( msg, NL802154_PAN_DESC_ATTR_GTS_PERMIT, beacon_notify->pan_desc.gts_permit) ||
+	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_LQI, beacon_notify->pan_desc.lqi) ||
+        nla_put_u32( msg, NL802154_PAN_DESC_ATTR_TIME_STAMP, beacon_notify->pan_desc.time_stamp) ||
+        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SEC_STATUS, beacon_notify->pan_desc.sec_status) ||
+        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SEC_LEVEL, beacon_notify->pan_desc.sec_level) ||
+        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_ID_MODE, beacon_notify->pan_desc.key_id_mode) ||
+        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_SRC, beacon_notify->pan_desc.key_src) ||
+        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_INDEX, beacon_notify->pan_desc.key_index)) {
+		ret = -ENOBUFS;
+		goto free_reply;
+	}
+	nla_nest_end( msg, nl_pan_desc );
+
+	ret = nla_put_u8( msg, NL802154_ATTR_PEND_ADDR_SPEC, beacon_notify->pend_addr_spec );
+	if ( 0 != ret ) {
+		goto nla_put_failure;
+	}
+
+	ret = nla_put_u32( msg, NL802154_ATTR_SDU_LENGTH, beacon_notify->sdu_len);
+	if ( 0 != ret ) {
+		goto nla_put_failure;
+	}
+
+	nl_sdu = nla_nest_start( msg, NL802154_ATTR_SDU );
+	for (i = 0; i <= beacon_notify->sdu_len; i++) {
+		ret = nla_put_u8(msg, NL802154_ATTR_SDU_ENTRY, beacon_notify->sdu[i]);
+        if ( 0 != ret ) {
+            goto nla_put_failure;
+        }
+	}
+	nla_nest_end( msg, nl_sdu );
+
+	genlmsg_end( msg, hdr );
+
+	net = genl_info_net(info);
+
+	printk( KERN_INFO "info->net address: %p\n", net );
+
+	printk( KERN_INFO "net->genl_sock address: %p\n", net->genl_sock );
+
+	ret = genlmsg_reply( msg, info);
+	goto out;
+
+nla_put_failure:
+free_reply:
+	nlmsg_free( msg );
+
+out:
+	return ret;
+}
+
+static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
+{
+	int r = 0;
+
+	struct cfg802154_registered_device *rdev;
+	struct work802154 *wrk;
+
+	struct device *dev;
+
+	rdev = info->user_ptr[0];
+
+	dev = &rdev->wpan_phy.dev;
+
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+	printk( KERN_INFO "PortID want to send to: %d\n", info->snd_portid );
+
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+	if ( NULL == wrk ) {
+		r = -ENOMEM;
+		goto out;
+	}
+
+	wrk->info = info;
+
+	init_completion( &wrk->completion );
+	INIT_WORK( &wrk->work, nl802154_beacon_work );
+	//schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
+	r = nl802154_add_work( wrk );
+	if ( 0 != r ) {
+		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	// Explicitely turn the radio on
+        // Enable reception of packets, and sending out netlink response
+	r = rdev_beacon_register_listener(rdev, NULL, info );
+
+        // Wait for work function to signal completion after a 10 second time-out.  This should be
+        // enough time for us to receive a beacon frame and send the indication back to user space
+        // before returning (and closing the netlink socket).
+        // Data is queued up and sent out once this doit() function returns.
+
+	wait_for_completion( &wrk->completion );
+
+	r = 0;
+	goto out;
+
+free_wrk:
+    kfree( wrk );
+out:
 	return r;
 }
 
@@ -1742,6 +1920,14 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
+		.doit = nl802154_set_beacon_indication,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 };
