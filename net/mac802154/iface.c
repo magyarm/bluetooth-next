@@ -408,11 +408,11 @@ static int mac802154_header_create(struct sk_buff *skb,
 	return hlen;
 }
 
-int mac802154_wpan_dev_header_create( struct sk_buff *skb,
+int ieee802154_header_create( struct sk_buff *skb,
 		struct wpan_dev *wpan_dev,
 		unsigned short type,
-		const void *daddr,
-		const void *saddr,
+		const struct ieee802154_addr *daddr,
+		const struct ieee802154_addr *saddr,
 		unsigned len)
 {
 	struct ieee802154_hdr hdr;
@@ -445,10 +445,10 @@ int mac802154_wpan_dev_header_create( struct sk_buff *skb,
 
 		hdr.source.pan_id = wpan_dev->pan_id;
 	} else {
-		hdr.source = *(const struct ieee802154_addr *)saddr;
+		hdr.source = *saddr;
 	}
 
-	hdr.dest = *(const struct ieee802154_addr *)daddr;
+	hdr.dest = *daddr;
 
 	hlen = ieee802154_hdr_push(skb, &hdr);
 	if (hlen < 0)
@@ -462,6 +462,7 @@ int mac802154_wpan_dev_header_create( struct sk_buff *skb,
 
 	return hlen;
 }
+EXPORT_SYMBOL(ieee802154_header_create);
 
 static int
 mac802154_header_parse(const struct sk_buff *skb, unsigned char *haddr)

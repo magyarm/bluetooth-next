@@ -357,16 +357,5 @@ void ieee802154_stop_queue(struct ieee802154_hw *hw);
  */
 void ieee802154_xmit_complete(struct ieee802154_hw *hw, struct sk_buff *skb,
 			      bool ifs_handling);
-/**
- * ieee802154_header_create - creates a proper 802154 mac header
- * based on the mac control block values in the supplied sk_buff
- *
- * This is a work around for *wpan_dev in net_device not being
- * populated when using mac802154_header_create through the
- * dev_hard_header function.
- */
-int ieee802154_header_create( struct sk_buff *skb, struct wpan_dev *wpan_dev,
-		unsigned short type, const void *daddr, const void *saddr,
-		unsigned len);
 
 #endif /* NET_MAC802154_H */
