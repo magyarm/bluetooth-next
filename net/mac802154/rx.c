@@ -66,15 +66,21 @@ static void rx_receive_work( struct work_struct *work )
 
 static void rx_active_scan_receive_work( struct work_struct *work )
 {
-	struct work_active_scan_work *wrk;
+	struct work_active_scan_receive *wrk_active_scan;
+	struct work802154 *wrk802154;
+
+	wrk_active_scan = container_of( work, struct work_active_scan_receive, work );
+
 	
-	wrk = container_of( work, struct work_active_scan_receive, work );
-
 	//Update the number of beacons in work802154.cmd_stuff.active_scan.result_list_size
+//	wrk802154 = container_of( wrk_active_scan, struct work802154, work );
+//
+//	//Should check mutex on work802154
+//	wrk802154->cmd_stuff.active_scan.result_list_size++;
 
-	cfg802154_inform_beacon(&wrk->ind, wrk->beacon_listener);
+	cfg802154_inform_beacon(&wrk_active_scan->ind, wrk_active_scan->active_scan_listener);
 
-	kfree( wrk );
+	kfree( wrk_active_scan );
 	return;
 }
 
@@ -157,8 +163,6 @@ static int ieee802154_active_scan_deliver_bcn(struct sk_buff *skb, struct ieee80
    struct ieee802154_beacon_indication ind;
    struct genl_info *info;
    struct work_active_scan_receive *wrk;
-
-   active_scan_work = container_of( local->active_scan_work, struct work_struct, work );
 
    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
    if ( NULL == wrk ) {

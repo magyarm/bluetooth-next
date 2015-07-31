@@ -28,36 +28,6 @@
 #include "rdev-ops.h"
 #include "core.h"
 
-struct work802154 {
-	// probably should add a mutex
-	struct sk_buff *skb;
-	struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
-	int cmd; // selects which item in the union below to use
-	union {
-		// put any additional command-specific structs in here
-		// note: only for information that must be conveyed e.g.
-		// between REQ and CNF - not for the entire CNF or IND.
-		// If you can extrapolate information from rdev, wpan_dev,
-		// info, etc, do not duplicated it here.
-		struct ed_scan {
-			u8 channel_page;
-			u32 scan_channels;
-			u8 scan_duration;
-		} ed_scan;
-		struct active_scan {
-			u8 channel_page;
-			u32 scan_channels;
-			u8 scan_duration;
-			u8 result_list_size;
-			u32 current_channel;
-			struct sk_buff *reply;
-			void *hdr;
-		} active_scan;
-	} cmd_stuff;
-	struct completion completion;
-	struct delayed_work work;
-};
-
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info);
 
@@ -286,8 +256,8 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
 	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
 	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
-	[NL802154_SDU_LENGTH] = { .type = NLA_U32 },
-	[NL802154_SDU] = { .type = NLA_NESTED },
+	[NL802154_ATTR_SDU_LENGTH] = { .type = NLA_U32 },
+	[NL802154_ATTR_SDU] = { .type = NLA_NESTED },
 
 };
 
@@ -2039,7 +2009,7 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
+		.cmd = NL802154_CMD_SET_BEACON_NOTIFY_IND,
 		.doit = nl802154_set_beacon_indication,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
