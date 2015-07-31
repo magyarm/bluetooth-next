@@ -233,6 +233,18 @@ void ieee802154_unregister_hw(struct ieee802154_hw *hw)
 }
 EXPORT_SYMBOL(ieee802154_unregister_hw);
 
+int ieee802154_header_create( struct sk_buff *skb,
+		struct wpan_dev *wpan_dev,
+		unsigned short type,
+		const void *daddr,
+		const void *saddr,
+		unsigned len)
+{
+	return mac802154_wpan_dev_header_create( skb, wpan_dev,
+			type, daddr, saddr, len);
+}
+EXPORT_SYMBOL(ieee802154_header_create);
+
 static int __init ieee802154_init(void)
 {
 	return ieee802154_iface_init();
