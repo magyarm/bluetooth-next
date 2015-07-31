@@ -1683,6 +1683,32 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto out;
 	}
 
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+	if ( NULL == wrk ) {
+		r = -ENOMEM;
+		goto out;
+	}
+
+	wrk->cmd = NL802154_CMD_ASSOC_REQ;
+	wrk->skb = skb;
+	wrk->info = info;
+
+	init_completion( &wrk->completion );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
+	r = schedule_delayed_work( &wrk->work, timeout_ms ) ? 0 : -EALREADY;
+	if ( 0 != r ) {
+		dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	wait_for_completion( &wrk->completion );
+
+	r = 0;
+	goto out;
+
+free_wrk:
+	kfree( wrk );
+
 out:
 	return r;
 

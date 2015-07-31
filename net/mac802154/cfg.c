@@ -20,8 +20,6 @@
 #include "driver-ops.h"
 #include "cfg.h"
 
-int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata, struct ieee802154_hdr *hdr, const struct ieee802154_mac_cb *cb);
-
 static struct net_device *
 ieee802154_add_iface_deprecated(struct wpan_phy *wpan_phy,
 				const char *name,
