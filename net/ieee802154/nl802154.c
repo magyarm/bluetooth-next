@@ -1287,21 +1287,11 @@ out:
 }
 
 enum {
-	NL802154_ADDR_SHORT = 2,
-	NL802154_ADDR_EXT = 3,
-};
-
-enum {
-	ASSOC_SHORT_ADDR_EXTENDED_ONLY = 0xfffe,
-	ASSOC_SHORT_ADDR_FAILURE = 0xffff,
-};
-
-enum {
-	ASSOC_SUCCESS,
-	ASSOC_ERR_PAN_AT_CAPACITY,
-	ASSOC_ERR_ACCESS_DENIED,
-	ASSOC_ERR_RESERVED = 0x7f,
-	CHANNEL_ACCESS_FAILURE,
+	MAC_ERR_SUCCESS,
+	MAC_ERR_PAN_AT_CAPACITY,
+	MAC_ERR_ACCESS_DENIED,
+	MAC_ERR_RESERVED = 0x7f,
+	MAC_ERR_CHANNEL_ACCESS_FAILURE,
 	MAC_ERR_NO_ACK,
 	MAC_ERR_NO_DATA,
 	MAC_ERR_COUNTER_ERROR,
@@ -1371,7 +1361,7 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 //	struct net_device *dev = info->user_ptr[1];
 
-	u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
+	u16 assoc_short_address = IEEE802154_ADDR_BROADCAST;
 	u8 status = MAC_ERR_NO_DATA;
 
 	dev_info( &rdev->wpan_phy.dev, "%s\n", __FUNCTION__ );
@@ -1388,7 +1378,7 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
-	static const u16 assoc_short_address = ASSOC_SHORT_ADDR_FAILURE;
+	static const u16 assoc_short_address = IEEE802154_ADDR_BROADCAST;
 	static const u8 status = MAC_ERR_NO_ACK;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
@@ -1455,13 +1445,13 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	coord_pan_id = nla_get_u8( info->attrs[ NL802154_ATTR_PAN_ID ] );
 
 	switch( coord_addr_mode ) {
-	case NL802154_ADDR_SHORT:
+	case IEEE802154_ADDR_SHORT:
 		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
 			break;
 		}
 		/* no break */
-	case NL802154_ADDR_EXT:
+	case IEEE802154_ADDR_LONG:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
 			break;
@@ -1549,8 +1539,6 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 		snprintf( device_addr_buf, sizeof( device_addr_buf ), "0x%04x", (u16)device_address );
 	}
 
-	dev_info( &dev->dev, "%s: status: 0x%02x, device_panid: 0x%04x, device_address: %s\n", __FUNCTION__, status, device_panid, device_addr_buf );
-
 	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
 	if ( NULL == reply ) {
 		r = -ENOMEM;
@@ -1566,7 +1554,7 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 
 	r =
 		nla_put_u8( reply, NL802154_ATTR_DISASSOC_STATUS, status ) ||
-		nla_put_u16( reply, NL802154_ATTR_ADDR_MODE, is_extended_address( device_address ) ? NL802154_ADDR_EXT : NL802154_ADDR_SHORT ) ||
+		nla_put_u16( reply, NL802154_ATTR_ADDR_MODE, is_extended_address( device_address ) ? IEEE802154_ADDR_LONG : IEEE802154_ADDR_SHORT ) ||
 		nla_put_u16( reply, NL802154_ATTR_PAN_ID, device_panid ) ||
 		(
 			( is_extended_address( device_address ) && nla_put_u64( reply, NL802154_ATTR_EXTENDED_ADDR, device_address ) ) ||
@@ -1689,13 +1677,13 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	device_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
 	device_panid = nla_get_u16( info->attrs[ NL802154_ATTR_PAN_ID ] );
 	switch( device_addr_mode ) {
-	case NL802154_ADDR_SHORT:
+	case IEEE802154_ADDR_SHORT:
 		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
 			device_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
 			break;
 		}
 		/* no break */
-	case NL802154_ADDR_EXT:
+	case IEEE802154_ADDR_LONG:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
 			device_address = nla_get_u64( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
 			break;
