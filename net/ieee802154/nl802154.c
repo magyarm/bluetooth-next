@@ -1255,8 +1255,8 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	scan_channels = wrk->cmd_stuff.active_scan.scan_channels;
 	scan_duration = wrk->cmd_stuff.active_scan.scan_duration;
 	current_channel = wrk->cmd_stuff.active_scan.current_channel;
-	reply = wrk->cmd_stuff.active_scan->reply;
-	hdr  = wrk->cmd_stuff.active_scan->hdr;
+	reply = &wrk->cmd_stuff.active_scan.reply;
+	hdr  = &wrk->cmd_stuff.active_scan.hdr;
 
 	if( 0 == current_channel ) {
 		//Initialize the netlink reply and header on the first entry to active scan work
@@ -1273,8 +1273,8 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 			goto free_reply;
 		}
 
-		wrk->cmd_stuff.active_scan->reply = reply;
-		wrk->cmd_stuff.actibe_scan->hdr = hdr;
+		wrk->cmd_stuff.active_scan.reply = &reply;
+		wrk->cmd_stuff.active_scan.hdr = &hdr;
 		rdev_active_scan_register_listener(rdev, NULL, info, work );
 	}
 
@@ -1333,7 +1333,7 @@ complete:
 	complete( &wrk->completion );
 	kfree( wrk );
 out:
-	return r;
+	return;
 }
 
 static void nl802154_beacon_work( struct work_struct *work ) {
