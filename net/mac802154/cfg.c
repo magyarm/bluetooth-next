@@ -528,14 +528,6 @@ static inline bool is_short_address( u16 addr ) {
 #define PRIx64 "llx"
 #endif
 
-static inline int
-ieee802154_header_create( struct sk_buff *skb, struct wpan_dev *wpan_dev,
-						int frame_type, struct ieee802154_addr *dst,
-						struct ieee802154_addr *src, size_t sz )
-{
-	return -ENOSYS;
-}
-
 static int
 ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
@@ -631,6 +623,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	dev_dbg( &wpan_dev->netdev->dev, "r value is %x", r );
+
 	if( 0 == r) {
 		goto error;
 	}
@@ -726,7 +719,7 @@ ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	dev_dbg( &wpan_dev->netdev->dev, "Src addr long: 0x%016" PRIx64 "\n", src_addr.extended_addr );
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size, false);
 	if ( 0 != r ) {
 		dev_err( &wpan_dev->netdev->dev, "ieee802154_header_create failed (%d)\n", r );
 		goto error;
