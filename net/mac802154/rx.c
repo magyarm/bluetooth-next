@@ -35,6 +35,13 @@ struct workbeaconreceive {
 	struct work_struct work;
 };
 
+struct work_active_scan_receive {
+	struct ieee802154_beacon_indication ind;
+	struct genl_info *active_scan_listener;
+	struct work_struct *active_scan_work;
+	struct work_struct work;
+};
+
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -45,7 +52,7 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	return netif_receive_skb(skb);
 }
 
-static void rx_receive_work( struct work_struct *work )
+static void rx_beacon_receive_work( struct work_struct *work )
 {
 	struct workbeaconreceive *wrk;
 
@@ -57,93 +64,82 @@ static void rx_receive_work( struct work_struct *work )
 	return;
 }
 
-static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct genl_info *info)
+static
+
+static int ieee802154_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct ieee802154_local *local)
 {
-	int ret = 0;
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
-	skb->protocol = htons(ETH_P_IEEE802154);
-	struct workbeaconreceive *wrk;
+   int ret = 0;
+   struct ieee802154_beacon_indication ind;
+   struct workbeaconreceive *wrk;
+   struct genl_info *info;
+
+   skb->ip_summed = CHECKSUM_UNNECESSARY;
+   skb->protocol = htons(ETH_P_IEEE802154);
 
    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
    if ( NULL == wrk ) {
-       ret = -ENOMEM;
-       goto out;
+      ret = -ENOMEM;
+      goto out;
    }
 
-    struct ieee802154_beacon_indication ind;
+   ind.bsn = hdr->seq;
+   ind.pan_desc.src_addr_mode   = hdr->fc.source_addr_mode;
 
-	/* Lets start parsing beacon packet here.
-	 * Data packets are processed by netif_receive_skb().
-	 * Not sure if beacon packets need any processing present in netif_receive_skb()
-	 */
+   if ( IEEE802154_ADDR_LONG == ind.pan_desc.src_addr_mode ) {
+       ind.pan_desc.src_addr = mac_cb(skb)->source.extended_addr;
+   }
+   else if ( IEEE802154_ADDR_SHORT == ind.pan_desc.src_addr_mode ) {
+       ind.pan_desc.src_addr = mac_cb(skb)->source.short_addr;
+   }
 
+   /* The Source PAN Identifier and Source Address fields contain the PAN identifier and address,
+    * respectively, of the device transmitting the beacon. */
+   ind.pan_desc.src_addr        = mac_cb(skb)->source.short_addr;
+   ind.pan_desc.src_pan_id      = mac_cb(skb)->source.pan_id;
+   ind.pan_desc.channel_num     = local->phy->current_channel;
+   ind.pan_desc.channel_page    = local->phy->current_page;
+   ind.pan_desc.superframe_spec = 0;
+   ind.pan_desc.gts_permit      = 0;
+   ind.pan_desc.lqi             = mac_cb(skb)->lqi;
+   ind.pan_desc.time_stamp      = 0;
+   ind.pan_desc.sec_status      = 0;
+   ind.pan_desc.sec_level       = mac_cb(skb)->seclevel;
+   ind.pan_desc.key_id_mode     = hdr->sec.key_id_mode;
+   ind.pan_desc.key_src         = 0;
+   ind.pan_desc.key_index       = hdr->sec.key_id;
 
-	/* Step 1: Extract the following beacon data.
-	 *
-	 * Beacon indication contains the following data:
-	 * BSN :
-	 *       desc: beacon sequence number
-	 *       type: uint8_t
-	 * PAN descriptor :
-	 *       CoordAddrMode:
-	 *            desc:
-	 *            type: enum
-	 *       CoordPanId:
-	 *            desc: PanID of the coordinator
-	 *            type:
-	 *       Channel Number:
-	 *            desc:
-	 *            type:
-	 *       Channel Page:
-	 *            desc:
-	 *            type:
-	 *       Superframe Spec:
-	 *            desc:
-	 *            type:
-	 *       GTP Permit:
-	 *            desc:
-	 *            type:
-	 *       Link Quality:
-	 *            desc:
-	 *            type: integer
-	 *       Timestamp
-	 *            desc:
-	 *            type: integer
-	 *
-	 * PendAddrSpec:
-	 *       desc: Beacon pending address specification (?)
-	 *       type: bitfield
-	 *
-	 * AddrList:
-	 *
-	 * sduLength:
-	 *       desc: Number of octets (bytes?) contained in the beacon payload
-	 *
-	 * sdu:
-	 *       desc: Set of octets (bytes?) comprising the beacon payload
-	 *
-	 */
+   ind.sdu_len = skb->len - skb->data_len;
+   memcpy(&ind.sdu, skb->data, ind.sdu_len);
 
-	//The addressing fields shall comprise only the source address fields.
-	//The Source PAN Identifier and Source Address fields shall contain the PAN identifier and address,
-	//respectively, of the device transmitting the beacon.
+   printk( KERN_INFO "Beacon BSN: %x  Pld: %x %x %x %x %x %x %x %x %x %x\n" , ind.bsn,
+   		skb->data[0],
+   		skb->data[1],
+   		skb->data[2],
+   		skb->data[3],
+   		skb->data[4],
+   		skb->data[5],
+   		skb->data[6],
+   		skb->data[7],
+   		skb->data[8],
+   		skb->data[9]);
 
-    ind.bsn = hdr->seq;
+   /* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
+    * where it can be accessed via netlink
+    */
+   if( local->active_scan_work ) {
+   	info = local->active_scan_listener;
+   } else {
+   	info = local->beacon_listener;
+   }
+   wrk->ind = ind;
+   wrk->beacon_listener = info;
 
-    printk( KERN_INFO "Beacon Sequence Number received: %x", ind.bsn );
+   INIT_WORK( &wrk->work, rx_beacon_receive_work );
 
-	/* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
-	 * where it can be accessed via netlink
-	 */
-    wrk->ind = ind;
-    wrk->beacon_listener = info;
-
-    INIT_WORK( &wrk->work, rx_receive_work );
-
-    ret = schedule_work( &wrk->work );
+   ret = schedule_work( &wrk->work );
 
 out:
-	return ret;
+   return ret;
 }
 
 static int
@@ -213,9 +209,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
 		printk( KERN_INFO "active_scan_listener address: %x\n", sdata->local->active_scan_listener );
-		if( sdata->local->active_scan_listener ) {
+		if( sdata->local->beacon_listener || sdata->local->active_scan_listener  ) {
 			printk( KERN_INFO "Received Beacon Frame Control");
-			return ieee802154_deliver_bcn(skb, hdr, sdata->local->active_scan_listener);
+			return ieee802154_deliver_bcn(skb, hdr, sdata->local );
 		}
 		break;
 	default:
