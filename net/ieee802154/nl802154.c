@@ -1561,7 +1561,7 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 		goto out;
 	}
 
-	hdr = nl802154hdr_put( msg, info->snd_portid, info->snd_seq, 0, NL802154_CMD_SET_BEACON_NOTIFY_IND );
+	hdr = nl802154hdr_put( msg, info->snd_portid, info->snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
 	if ( NULL == hdr ) {
 		ret = -ENOBUFS;
 		goto free_reply;
