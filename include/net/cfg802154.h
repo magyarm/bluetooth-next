@@ -73,7 +73,7 @@ struct cfg802154_ops {
 				struct wpan_dev *wpan_dev, bool mode);
 	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	            u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
-	int (*disassoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+	int	(*disassoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 						u16 device_panid, u64 device_address,
 						u8 disassociate_reason, u8 tx_indirect);
 };
