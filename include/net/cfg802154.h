@@ -48,9 +48,17 @@ struct cfg802154_ops {
 				const struct wpan_phy_cca *cca);
 	int     (*set_cca_ed_level)(struct wpan_phy *wpan_phy, s32 ed_level);
 	int     (*set_tx_power)(struct wpan_phy *wpan_phy, s32 power);
+	int	(*set_addr_mode)(struct wpan_phy *wpan_phy,
+		      struct wpan_dev *wpan_dev, u8 mode);
 	int	(*set_pan_id)(struct wpan_phy *wpan_phy,
 			      struct wpan_dev *wpan_dev, __le16 pan_id);
 	int	(*set_short_addr)(struct wpan_phy *wpan_phy,
+				  struct wpan_dev *wpan_dev, __le16 short_addr);
+	int	(*set_coord_addr_mode)(struct wpan_phy *wpan_phy,
+		      struct wpan_dev *wpan_dev, u8 mode);
+	int	(*set_coord_extended_addr)(struct wpan_phy *wpan_phy,
+			      struct wpan_dev *wpan_dev, __le64 extended_addr);
+	int	(*set_coord_short_addr)(struct wpan_phy *wpan_phy,
 				  struct wpan_dev *wpan_dev, __le16 short_addr);
 	int	(*set_backoff_exponent)(struct wpan_phy *wpan_phy,
 					struct wpan_dev *wpan_dev, u8 min_be,
@@ -73,6 +81,9 @@ struct cfg802154_ops {
 				u64 src_addr );
 	int (*register_assoc_req_listener)(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
 			void (*callback)( struct sk_buff *, void *), void *arg );
+	int	(*disassoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+						u16 device_panid, u64 device_address,
+						u8 disassociate_reason, u8 tx_indirect);
 };
 
 static inline bool
@@ -186,9 +197,13 @@ struct wpan_dev {
 	u32 identifier;
 
 	/* MAC PIB */
+	u8 addr_mode;
 	__le16 pan_id;
 	__le16 short_addr;
 	__le64 extended_addr;
+	u8 coord_addr_mode;
+	__le16 coord_short_addr;
+	__le64 coord_extended_addr;
 
 	/* MAC BSN field */
 	atomic_t bsn;
