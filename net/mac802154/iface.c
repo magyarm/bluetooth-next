@@ -462,6 +462,7 @@ int ieee802154_header_create( struct sk_buff *skb,
 
 	return hlen;
 }
+EXPORT_SYMBOL(ieee802154_header_create);
 
 static int
 mac802154_header_parse(const struct sk_buff *skb, unsigned char *haddr)

@@ -187,4 +187,8 @@ ieee802154_if_add(struct ieee802154_local *local, const char *name,
 void ieee802154_remove_interfaces(struct ieee802154_local *local);
 void ieee802154_stop_device(struct ieee802154_local *local);
 
+int ieee802154_header_create( struct sk_buff *skb, struct wpan_dev *wpan_dev,
+		unsigned short type, const struct ieee802154_addr *daddr,
+		const struct ieee802154_addr *saddr, unsigned len);
+
 #endif /* __IEEE802154_I_H */

@@ -379,13 +379,6 @@ out:
 	return r;
 }
 
-int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
-{
-	int ret;
-	ret = nl802154_beacon_notify_indication( beacon_notify, info );
-	return ret;
-}
-
 int cfg802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work )
 {
 	return nl802154_active_scan_pan_descriptor_send( beacon_notify, info, active_scan_work );
