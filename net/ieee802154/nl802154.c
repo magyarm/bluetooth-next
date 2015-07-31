@@ -1535,8 +1535,6 @@ static void nl802154_beacon_work( struct work_struct *work ) {
 
 	rdev = info->user_ptr[0];
 
-	msleep( 10000 );
-
 	rdev_beacon_deregister_listener( rdev );
 
 	complete( &wrk->completion );
@@ -1553,10 +1551,9 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 	struct net *net;
 	struct nlattr *nl_pan_desc;
 	struct nlattr *nl_sdu;
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 
-	printk( KERN_INFO "In nl802154_beacon_notify_indication\n");
-	printk( KERN_INFO "PortID we are sending to is: %d\n", info->snd_portid );
-	printk( KERN_INFO "Info address: %p\n", info );
+	dev_dbg( &rdev->wpan_phy.dev, "Inside %s\n", __FUNCTION__);
 
 	msg = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
 	if ( NULL == msg ) {
@@ -1576,20 +1573,20 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 	}
 
 	nl_pan_desc = nla_nest_start( msg, NL802154_ATTR_PAN_DESCRIPTOR );
-	if (nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SRC_ADDR_MODE, beacon_notify->pan_desc.src_addr_mode ) ||
-	    nla_put_u16( msg, NL802154_PAN_DESC_ATTR_SRC_PAN_ID, beacon_notify->pan_desc.src_pan_id) ||
-	    nla_put_u32( msg, NL802154_PAN_DESC_ATTR_SRC_ADDR, beacon_notify->pan_desc.src_addr) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_CHANNEL_NUM, beacon_notify->pan_desc.channel_num) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_CHANNEL_PAGE, beacon_notify->pan_desc.channel_page) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SUPERFRAME_SPEC, beacon_notify->pan_desc.superframe_spec) ||
-	    nla_put_u32( msg, NL802154_PAN_DESC_ATTR_GTS_PERMIT, beacon_notify->pan_desc.gts_permit) ||
-	    nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_LQI, beacon_notify->pan_desc.lqi) ||
-        nla_put_u32( msg, NL802154_PAN_DESC_ATTR_TIME_STAMP, beacon_notify->pan_desc.time_stamp) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SEC_STATUS, beacon_notify->pan_desc.sec_status) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_SEC_LEVEL, beacon_notify->pan_desc.sec_level) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_ID_MODE, beacon_notify->pan_desc.key_id_mode) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_SRC, beacon_notify->pan_desc.key_src) ||
-        nla_put_u8 ( msg, NL802154_PAN_DESC_ATTR_KEY_INDEX, beacon_notify->pan_desc.key_index)) {
+	if (nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify->pan_desc.src_addr_mode ) ||
+	    nla_put_u16( msg, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify->pan_desc.src_pan_id) ||
+	    nla_put_u32( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify->pan_desc.src_addr) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify->pan_desc.channel_num) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify->pan_desc.channel_page) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify->pan_desc.superframe_spec) ||
+	    nla_put_u32( msg, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify->pan_desc.gts_permit) ||
+	    nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_LQI, beacon_notify->pan_desc.lqi) ||
+        nla_put_u32( msg, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify->pan_desc.time_stamp) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify->pan_desc.sec_status) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify->pan_desc.sec_level) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify->pan_desc.key_id_mode) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify->pan_desc.key_src) ||
+        nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify->pan_desc.key_index)) {
 		ret = -ENOBUFS;
 		goto free_reply;
 	}
@@ -1618,10 +1615,6 @@ int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beac
 
 	net = genl_info_net(info);
 
-	printk( KERN_INFO "info->net address: %p\n", net );
-
-	printk( KERN_INFO "net->genl_sock address: %p\n", net->genl_sock );
-
 	ret = genlmsg_reply( msg, info);
 	goto out;
 
@@ -1633,10 +1626,11 @@ out:
 	return ret;
 }
 
-static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info *info )
+static int nl802154_get_beacon_indication( struct sk_buff *skb, struct genl_info *info )
 {
 	int r = 0;
 
+	u16 timeout_ms;
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
 
@@ -1646,9 +1640,12 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 
 	dev = &rdev->wpan_phy.dev;
 
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+	dev_dbg( &rdev->wpan_phy.dev, "Inside %s\n", __FUNCTION__);
 
-	printk( KERN_INFO "PortID want to send to: %d\n", info->snd_portid );
+	if ( ! ( info->attrs[ NL802154_ATTR_BEACON_INDICATION_TIMEOUT ] ) ) {
+		r = -EINVAL;
+		goto out;
+	}
 
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
 	if ( NULL == wrk ) {
@@ -1656,11 +1653,12 @@ static int nl802154_set_beacon_indication( struct sk_buff *skb, struct genl_info
 		goto out;
 	}
 
+	timeout_ms = nla_get_u16( info->attrs[ NL802154_ATTR_BEACON_INDICATION_TIMEOUT ] );
 	wrk->info = info;
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_beacon_work );
-	schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
+	schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) );
 	if ( 0 != r ) {
 		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
 		goto free_wrk;
@@ -1917,8 +1915,8 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_SET_BEACON_NOTIFY,
-		.doit = nl802154_set_beacon_indication,
+		.cmd = NL802154_CMD_GET_BEACON_NOTIFY,
+		.doit = nl802154_get_beacon_indication,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |

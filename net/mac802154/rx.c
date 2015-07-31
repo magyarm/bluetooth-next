@@ -104,18 +104,6 @@ static int ieee802154_deliver_bcn(struct sk_buff *skb, const struct ieee802154_h
     ind.sdu_len = skb->len - skb->data_len;
     memcpy(&ind.sdu, skb->data, ind.sdu_len);
 
-    printk( KERN_INFO "Beacon BSN: %x  Pld: %x %x %x %x %x %x %x %x %x %x\n" , ind.bsn,
-    		skb->data[0],
-    		skb->data[1],
-    		skb->data[2],
-    		skb->data[3],
-    		skb->data[4],
-    		skb->data[5],
-    		skb->data[6],
-    		skb->data[7],
-    		skb->data[8],
-    		skb->data[9]);
-
     /* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
      * where it can be accessed via netlink
      */
