@@ -118,6 +118,54 @@ rdev_set_tx_power(struct cfg802154_registered_device *rdev,
 }
 
 static inline int
+rdev_set_coord_addr_mode(struct cfg802154_registered_device *rdev,
+		struct wpan_dev *wpan_dev, u8 mode)
+{
+	int ret;
+
+	//trace_802154_rdev_set_coord_addr_mode(&rdev->wpan_phy, wpan_dev, mode);
+	ret = rdev->ops->set_coord_addr_mode(&rdev->wpan_phy, wpan_dev, mode);
+	//trace_802154_rdev_return_int(&rdev->wpan_phy, ret);
+	return ret;
+}
+
+static inline int
+rdev_set_coord_extended_addr(struct cfg802154_registered_device *rdev,
+		struct wpan_dev *wpan_dev, __le64 extended_addr)
+{
+	int ret;
+
+	//trace_802154_rdev_set_coord_extended_addr(&rdev->wpan_phy, wpan_dev, extended_addr);
+	ret = rdev->ops->set_coord_extended_addr(&rdev->wpan_phy, wpan_dev, extended_addr);
+	//trace_802154_rdev_return_int(&rdev->wpan_phy, ret);
+	return ret;
+}
+
+static inline int
+rdev_set_coord_short_addr(struct cfg802154_registered_device *rdev,
+		    struct wpan_dev *wpan_dev, __le16 short_addr)
+{
+	int ret;
+
+	//trace_802154_rdev_set_coord_short_addr(&rdev->wpan_phy, wpan_dev, short_addr);
+	ret = rdev->ops->set_coord_short_addr(&rdev->wpan_phy, wpan_dev, short_addr);
+	//trace_802154_rdev_return_int(&rdev->wpan_phy, ret);
+	return ret;
+}
+
+static inline int
+rdev_set_addr_mode(struct cfg802154_registered_device *rdev,
+		struct wpan_dev *wpan_dev, u8 mode)
+{
+	int ret;
+
+	//trace_802154_rdev_set_addr_mode(&rdev->wpan_phy, wpan_dev, mode);
+	ret = rdev->ops->set_addr_mode(&rdev->wpan_phy, wpan_dev, mode);
+	//trace_802154_rdev_return_int(&rdev->wpan_phy, ret);
+	return ret;
+}
+
+static inline int
 rdev_set_pan_id(struct cfg802154_registered_device *rdev,
 		struct wpan_dev *wpan_dev, __le16 pan_id)
 {
@@ -236,11 +284,14 @@ rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, str
 
 static inline int
 rdev_disassoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-				u16 device_pan_id, u64 device_address, u8 disassociate_reason,
+				u16 device_panid, u64 device_address, u8 disassociate_reason,
 				u8 tx_indirect )
 {
-	int ret = 0;
+	int ret;
 
+//	trace_802154_rdev_disassoc_req(&rdev->wpan_phy, wpan_dev);
+	ret = rdev->ops->disassoc_req(&rdev->wpan_phy, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect);
+//	trace_802154_rdev_disassoc_req(&rdev->wpan_phy);
 	return ret;
 }
 

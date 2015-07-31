@@ -1535,8 +1535,9 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 
 	int r;
 
-//	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	char device_addr_buf[32];
 	struct sk_buff *reply;
@@ -1588,6 +1589,13 @@ nla_put_failure:
 free_reply:
 	nlmsg_free( reply );
 out:
+	rdev_set_coord_addr_mode( rdev, wpan_dev, IEEE802154_ADDR_NONE );
+	rdev_set_coord_short_addr( rdev, wpan_dev, IEEE802154_ADDR_UNDEF );
+	rdev_set_coord_extended_addr( rdev, wpan_dev, IEEE802154_PANID_BROADCAST );
+
+	rdev_set_addr_mode( rdev, wpan_dev, IEEE802154_ADDR_NONE );
+	rdev_set_short_addr( rdev, wpan_dev, IEEE802154_ADDR_UNDEF );
+	rdev_set_pan_id( rdev, wpan_dev, IEEE802154_PANID_BROADCAST );
 	return;
 }
 
@@ -1597,10 +1605,11 @@ static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
-	//struct sk_buff *skb_out = wrk->skb;
+	struct sk_buff *skb_out = wrk->skb;
 
-//	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	u8 status = MAC_ERR_NO_DATA;
 
@@ -1608,9 +1617,9 @@ static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) 
 
 	cancel_delayed_work( &wrk->work );
 
-	// parse data from skb_in
+	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, work );
 
-	nl802154_disassoc_cnf( wrk->skb, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
+	nl802154_disassoc_cnf( skb_out, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1623,7 +1632,7 @@ static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
-	//struct sk_buff *skb_out = wrk->skb;
+	struct sk_buff *skb_out = wrk->skb;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
@@ -1631,9 +1640,9 @@ static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 
 	dev_err( &dev->dev, "%s\n", __FUNCTION__ );
 
-	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, (void *) wrk );
+	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, (void *)work );
 
-	nl802154_disassoc_cnf( wrk->skb, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
+	nl802154_disassoc_cnf( skb_out, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1641,11 +1650,6 @@ static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 
 static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 {
-	enum {
-		NL802154_ADDR_MODE_SHORT = 2,
-		NL802154_ADDR_MODE_EXT = 3,
-	};
-
 	int r;
 
 	u8 device_addr_mode;
@@ -1660,9 +1664,9 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 //	u64 key_source;
 //	u32 key_index;
 
-//	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
-	//struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	struct work802154 *wrk;
 
@@ -1685,13 +1689,13 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	device_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
 	device_panid = nla_get_u16( info->attrs[ NL802154_ATTR_PAN_ID ] );
 	switch( device_addr_mode ) {
-	case NL802154_ADDR_MODE_SHORT:
+	case NL802154_ADDR_SHORT:
 		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
 			device_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
 			break;
 		}
 		/* no break */
-	case NL802154_ADDR_MODE_EXT:
+	case NL802154_ADDR_EXT:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
 			device_address = nla_get_u64( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
 			break;
@@ -1719,16 +1723,32 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_disassoc_req_timeout );
+
+	r = rdev_register_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, wrk );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "rdev_register_disassoc_listener failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	r = rdev_disassoc_req( rdev, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "rdev_disassoc_req failed (%d)\n", r );
+		goto dereg_listener;
+	}
+
 	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "schedule_delayed_work failed (%d)\n", r );
-		goto free_wrk;
+		goto dereg_listener;
 	}
 
 	wait_for_completion( &wrk->completion );
 
 	r = 0;
 	goto out;
+
+dereg_listener:
+	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, (void *) &wrk->work.work );
 
 free_wrk:
 	kfree( wrk );
