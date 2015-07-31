@@ -1208,7 +1208,6 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	u8 scan_duration;
 	u32 current_channel;
 	__le32 unscanned_channels;
-	u8 result_list_size;
 	u8 detected_category;
 	struct sk_buff *reply;
 	void *hdr;
@@ -1281,7 +1280,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 			nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
 			nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page ) ||
 			nla_put_u32( reply, NL802154_ATTR_SUPPORTED_CHANNEL, unscanned_channels ) ||
-			nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, result_list_size ) ||
+			nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, wrk->cmd_stuff.active_scan.result_list_size ) ||
 			nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, detected_category );
 		if ( 0 != r ) {
 			dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
