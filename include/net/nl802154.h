@@ -331,5 +331,7 @@ struct ieee802154_beacon_indication {
 struct genl_info;
 
 int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info );
+int cfg802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work );
+
 
 #endif /* __NL802154_H */

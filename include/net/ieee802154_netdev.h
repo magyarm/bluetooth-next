@@ -430,34 +430,4 @@ ieee802154_mlme_ops(const struct net_device *dev)
 	return dev->ml_priv;
 }
 
-struct work802154 {
-	// probably should add a mutex
-	struct sk_buff *skb;
-	struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
-	int cmd; // selects which item in the union below to use
-	union {
-		// put any additional command-specific structs in here
-		// note: only for information that must be conveyed e.g.
-		// between REQ and CNF - not for the entire CNF or IND.
-		// If you can extrapolate information from rdev, wpan_dev,
-		// info, etc, do not duplicated it here.
-		struct ed_scan {
-			u8 channel_page;
-			u32 scan_channels;
-			u8 scan_duration;
-		} ed_scan;
-		struct active_scan {
-			u8 channel_page;
-			u32 scan_channels;
-			u8 scan_duration;
-			u8 result_list_size;
-			u32 current_channel;
-			struct sk_buff *reply;
-			void *hdr;
-		} active_scan;
-	} cmd_stuff;
-	struct completion completion;
-	struct delayed_work work;
-};
-
 #endif

@@ -240,5 +240,6 @@ static inline const char *wpan_phy_name(struct wpan_phy *phy)
 }
 
 int nl802154_beacon_notify_indication( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info );
+int nl802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work );
 
 #endif /* __NET_CFG802154_H */
