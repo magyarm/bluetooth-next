@@ -289,25 +289,6 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_register_beacon_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
-{
-	int ret = 0;
-	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->beacon_listener = info;
-	ret = drv_start( local );
-	return ret;
-}
-
-static int
-ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
-{
-	int ret = 0;
-	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->beacon_listener = NULL;
-	return ret;
-}
-
-static int
 ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info, struct work_struct *work)
 {
 	int ret = 0;
@@ -326,62 +307,6 @@ ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy )
 	local->active_scan_listener = NULL;
 	local->active_scan_work = NULL;
 	return ret;
-}
-
-static int
-ieee802154_header_create( struct sk_buff *skb,
-		struct wpan_dev *wpan_dev,
-		unsigned short type,
-		const void *daddr,
-		const void *saddr,
-		unsigned len)
-{
-	struct ieee802154_hdr hdr;
-	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
-	struct ieee802154_mac_cb *cb = mac_cb(skb);
-	int hlen;
-
-	if (!daddr)
-		return -EINVAL;
-
-	memset(&hdr.fc, 0, sizeof(hdr.fc));
-	hdr.fc.type = cb->type;
-	hdr.fc.security_enabled = cb->secen;
-	hdr.fc.ack_request = cb->ackreq;
-	hdr.seq = atomic_inc_return(&wpan_dev->dsn) & 0xFF;
-
-	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
-		return -EINVAL;
-
-	if (!saddr) {
-		if (wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_BROADCAST) ||
-		    wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_UNDEF) ||
-		    wpan_dev->pan_id == cpu_to_le16(IEEE802154_PANID_BROADCAST)) {
-			hdr.source.mode = IEEE802154_ADDR_LONG;
-			hdr.source.extended_addr = wpan_dev->extended_addr;
-		} else {
-			hdr.source.mode = IEEE802154_ADDR_SHORT;
-			hdr.source.short_addr = wpan_dev->short_addr;
-		}
-
-		hdr.source.pan_id = wpan_dev->pan_id;
-	} else {
-		hdr.source = *(const struct ieee802154_addr *)saddr;
-	}
-
-	hdr.dest = *(const struct ieee802154_addr *)daddr;
-
-	hlen = ieee802154_hdr_push(skb, &hdr);
-	if (hlen < 0)
-		return -EINVAL;
-
-	skb_reset_mac_header(skb);
-	skb->mac_len = hlen;
-
-	if (len > ieee802154_max_payload(&hdr))
-		return -EMSGSIZE;
-
-	return hlen;
 }
 
 static int
@@ -484,8 +409,6 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
-	.register_beacon_listener = ieee802154_register_beacon_listener,
-	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
 	.register_active_scan_listener = ieee802154_register_active_scan_listener,
 	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
 	.send_beacon_command_frame = ieee802154_send_beacon_command_frame,

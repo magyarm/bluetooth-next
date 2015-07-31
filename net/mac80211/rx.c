@@ -2951,7 +2951,6 @@ ieee80211_rx_h_action_return(struct ieee80211_rx_data *rx)
 	return RX_QUEUED;
 }
 
-/* GC-BEACON: Takes care of received management frames */
 static ieee80211_rx_result debug_noinline
 ieee80211_rx_h_mgmt(struct ieee80211_rx_data *rx)
 {
