@@ -1257,26 +1257,6 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	reply = &wrk->cmd_stuff.active_scan.reply;
 	hdr  = &wrk->cmd_stuff.active_scan.hdr;
 
-	if( 0 == current_channel ) {
-		//Initialize the netlink reply and header on the first entry to active scan work
-		reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-		if ( NULL == reply ) {
-			r = -ENOMEM;
-			dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
-			goto out;
-		}
-
-		hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
-		if ( NULL == hdr ) {
-			r = -ENOBUFS;
-			goto free_reply;
-		}
-
-		wrk->cmd_stuff.active_scan.reply = &reply;
-		wrk->cmd_stuff.active_scan.hdr = &hdr;
-		rdev_active_scan_register_listener(rdev, NULL, info, work );
-	}
-
 	//Scanning process
 	//Check that the current channel is selected in the scan_channels bit mask.
 	//If not add it to the unscanned channels bit mask
@@ -1305,13 +1285,8 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 
 	if( IEEE802154_MAX_CHANNEL == current_channel || r != 0) {
 		//Add the remaining MLME-SCAN.confirm parameters as netlink attributes and send
-		r =
-			nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, r ) ||
-			nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
-			nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page ) ||
-			nla_put_u32( reply, NL802154_ATTR_SUPPORTED_CHANNEL, unscanned_channels ) ||
-			nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, wrk->cmd_stuff.active_scan.result_list_size ) ||
-			nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, detected_category );
+		r = nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, wrk->cmd_stuff.active_scan.result_list_size );
+
 		if ( 0 != r ) {
 			dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
 			goto nla_put_failure;
@@ -1395,8 +1370,8 @@ out:
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
-	int r;
-
+	u8 r;
+	u8 status = IEEE802154_SUCCESS;
 	u8 scan_type;
 	u32 scan_channels;
 	u8 scan_duration;
@@ -1458,6 +1433,31 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 		wrk->cmd_stuff.active_scan.scan_duration = scan_duration;
 		wrk->cmd_stuff.active_scan.result_list_size = 0; //Initalize the result list
 		wrk->cmd_stuff.active_scan.current_channel = 0;
+
+		//Initialize the netlink reply and header on the first entry to active scan work
+		wrk->cmd_stuff.active_scan.reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+		if ( NULL == wrk->cmd_stuff.active_scan.reply ) {
+			r = -ENOMEM;
+			dev_err( dev, "nlmsg_new failed (%d)\n", r );
+			goto out;
+		}
+
+		wrk->cmd_stuff.active_scan.hdr = nl802154hdr_put( wrk->cmd_stuff.active_scan.reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
+		if ( NULL == wrk->cmd_stuff.active_scan.hdr ) {
+			r = -ENOBUFS;
+			goto free_reply;
+		}
+
+		// Send invariant parts of the MLME-SCAN.confirm parameters
+		r =
+				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_STATUS, status ) ||
+				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
+				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAGE, channel_page ) ||
+//				nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SUPPORTED_CHANNEL, unscanned_channels ) ||
+				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, 0 ); //Todo: Replace with enum. Not using UWB so detected category is not supported
+
+		r = rdev_active_scan_register_listener(rdev, NULL, info, &wrk->work.work );
+
 		INIT_DELAYED_WORK( &wrk->work, nl802154_active_scan_cnf );
 		printk(KERN_INFO "Adding active scan work\n");
 	}
@@ -1474,6 +1474,8 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	r = 0;
 	goto out;
 
+free_reply:
+	nlmsg_free( wrk->cmd_stuff.active_scan.reply );
 free_wrk:
 	kfree( wrk );
 
