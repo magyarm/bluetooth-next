@@ -301,4 +301,35 @@ enum nl802154_supported_bool_states {
 	NL802154_SUPPORTED_BOOL_MAX = __NL802154_SUPPORTED_BOOL_AFTER_LAST - 1
 };
 
+struct ieee802154_beacon_indication {
+	u8 bsn;
+
+	struct {
+		u8 src_addr_mode;          /* enumeration:  SHORT_ADDR, EXTENDED_ADDR   */
+		u16 src_pan_id;            /* Integer    :  0x0000 -- 0xffff            */
+		u32 src_addr;              /* type?      :  range ?                     */
+		u8 channel_num;            /* integer    :  11 - 27?                    */
+		u8 channel_page;           /* integer    :  range ?                     */
+		u8 superframe_spec;        /* bitfield   :                              */
+		bool gts_permit;           /* boolean    :  true, false                 */
+		u8 lqi;                    /* integer    :  0x00 -- 0xff                */
+		u32 time_stamp;            /* integer    :  0x000000 -- 0xffffff        */
+		u8 sec_status;             /* bitfield   :                              */
+		u8 sec_level;              /* integer    :  0x00 -- 0x07                */
+		u8 key_id_mode;            /* integer    :                              */
+		u8 key_src;
+		u8 key_index;
+		/* codeList */             /* ??                                        */
+	} pan_desc;
+
+	u8 pend_addr_spec;             /* bitmap     :                              */
+	/* addr_list */                /* ??                                        */
+	u32 sdu_len;                   /* integer    : 0 -- aMaxBeaconPayloadLength */
+	u8 sdu[127];                   /* byte array :                              */
+};
+
+struct genl_info;
+
+int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info );
+
 #endif /* __NL802154_H */
