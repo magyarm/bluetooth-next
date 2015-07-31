@@ -212,10 +212,10 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		printk( KERN_INFO "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
-		printk( KERN_INFO "beacon listener address: %x\n", sdata->local->beacon_listener );
-		if( sdata->local->beacon_listener ) {
+		printk( KERN_INFO "active_scan_listener address: %x\n", sdata->local->active_scan_listener );
+		if( sdata->local->active_scan_listener ) {
 			printk( KERN_INFO "Received Beacon Frame Control");
-			return ieee802154_deliver_bcn(skb, hdr, sdata->local->beacon_listener);
+			return ieee802154_deliver_bcn(skb, hdr, sdata->local->active_scan_listener);
 		}
 		break;
 	default:
