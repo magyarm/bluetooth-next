@@ -66,21 +66,13 @@ static void rx_receive_work( struct work_struct *work )
 
 static void rx_active_scan_receive_work( struct work_struct *work )
 {
-	struct work_active_scan_receive *wrk_active_scan;
-	struct work802154 *wrk802154;
+	struct work_active_scan_receive *wrk;
 
-	wrk_active_scan = container_of( work, struct work_active_scan_receive, work );
+	wrk = container_of( work, struct work_active_scan_receive, work );
 
-	
-	//Update the number of beacons in work802154.cmd_stuff.active_scan.result_list_size
-//	wrk802154 = container_of( wrk_active_scan, struct work802154, work );
-//
-//	//Should check mutex on work802154
-//	wrk802154->cmd_stuff.active_scan.result_list_size++;
+	cfg802154_active_scan_pan_descriptor_send(&wrk->ind, wrk->active_scan_listener, wrk->active_scan_work);
 
-	cfg802154_inform_beacon(&wrk_active_scan->ind, wrk_active_scan->active_scan_listener);
-
-	kfree( wrk_active_scan );
+	kfree( wrk );
 	return;
 }
 

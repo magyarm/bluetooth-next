@@ -1305,6 +1305,65 @@ out:
 	return;
 }
 
+int nl802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work )
+{
+	int ret = 0;
+	int i;
+
+	struct net *net;
+	struct nlattr *nl_pan_desc;
+
+	struct work802154 *wrk;
+
+	printk( KERN_INFO "In nl802154_active_scan_pan_descriptor_send\n");
+	printk( KERN_INFO "PortID we are sending to is: %d\n", info->snd_portid );
+	printk( KERN_INFO "Info address: %p\n", info );
+
+	wrk = container_of( to_delayed_work( work ), struct work802154, work );
+
+
+
+	nl_pan_desc = nla_nest_start( msg, NL802154_ATTR_PAN_DESCRIPTOR );
+	if (nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify->pan_desc.src_addr_mode ) ||
+			nla_put_u16( msg, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify->pan_desc.src_pan_id) ||
+			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify->pan_desc.src_addr) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify->pan_desc.channel_num) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify->pan_desc.channel_page) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify->pan_desc.superframe_spec) ||
+			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify->pan_desc.gts_permit) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_LQI, beacon_notify->pan_desc.lqi) ||
+			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify->pan_desc.time_stamp) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify->pan_desc.sec_status) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify->pan_desc.sec_level) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify->pan_desc.key_id_mode) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify->pan_desc.key_src) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify->pan_desc.key_index)) {
+		ret = -ENOBUFS;
+		goto free_reply;
+	}
+	nla_nest_end( msg, nl_pan_desc );
+
+	//Todo: Figure out the the code list attribute of the PANDescriptor. Looks to be UWB related. Probably don't care
+
+
+	net = genl_info_net(info);
+
+	printk( KERN_INFO "info->net address: %p\n", net );
+
+	printk( KERN_INFO "net->genl_sock address: %p\n", net->genl_sock );
+
+	ret = genlmsg_reply( msg, info);
+	goto out;
+
+nla_put_failure:
+free_reply:
+	//Set the status value to error in the scan confirm work
+	nlmsg_free( msg );
+
+	out:
+	return ret;
+}
+
 static void nl802154_beacon_work( struct work_struct *work ) {
 
 	struct work802154 *wrk;

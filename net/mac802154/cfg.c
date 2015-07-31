@@ -461,6 +461,11 @@ int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify,
 	return ret;
 }
 
+int cfg802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work )
+{
+	return nl802154_active_scan_pan_descriptor_send( beacon_notify, info, active_scan_work );
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
