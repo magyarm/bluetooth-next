@@ -1302,6 +1302,53 @@ enum {
 	MAC_ERR_INVALID_PARAMETER,
 };
 
+static int nl802154_assoc_ack( struct sk_buff *skb, struct genl_info *info ){
+
+	int r;
+	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
+	r = 0;
+	/*
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	//	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = &rdev->wpan_phy.dev;
+
+	u32 timeout_ms = 5000;
+
+	struct work802154 *wrk;
+
+	rdev_assoc_ack( rdev, wpan_dev );
+
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+	if ( NULL == wrk ) {
+		dev_err( &rdev->wpan_phy.dev, "Could not allocate work for assoc_ack\n");
+		goto out;
+	}
+
+	rdev_register_assoc_req_listener(rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk->work );
+
+	wrk->cmd = NL802154_CMD_ASSOC_REQ;
+	wrk->skb = skb;
+	wrk->info = info;
+
+	init_completion( &wrk->completion );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
+	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
+	if ( 0 != r ) {
+		dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	wait_for_completion( &wrk->completion );
+
+	goto out;
+
+free_wrk:
+	kfree( wrk );
+*/
+out:
+	return r;
+}
+
 static void nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, u16 assoc_short_address, u8 status ) {
 
 	int r;
@@ -1367,7 +1414,7 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
 	// parse data from skb_in
 
-	nl802154_assoc_cnf( wrk->skb, wrk->info, assoc_short_address, status );
+	nl802154_assoc_ack( wrk->skb, wrk->info );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1413,7 +1460,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 //	u32 key_id_mode;
 //	u64 key_source;
 //	u32 key_index;
-	u32 timeout_ms = 5000;
+	u32 timeout_ms = 10000;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 //	struct net_device *dev = info->user_ptr[1];
@@ -1496,10 +1543,12 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	rdev_set_channel(rdev, channel_page, channel_number);
 
-	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
-			capability_information , src_addr);
+	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_ack, (void *) wrk );
 
-	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
+	r = rdev_assoc_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address,
+			capability_information , src_addr);
+	msleep(10);
+	r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, src_addr);
 
 	wrk->cmd = NL802154_CMD_ASSOC_REQ;
 	wrk->skb = skb;

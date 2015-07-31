@@ -294,7 +294,8 @@ ieee802154_header_create( struct sk_buff *skb,
 								unsigned short type,
 								const void *daddr,
 								const void *saddr,
-								unsigned len)
+								unsigned len,
+								bool intra_pan)
 {
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct ieee802154_hdr hdr;
@@ -309,11 +310,12 @@ ieee802154_header_create( struct sk_buff *skb,
 	hdr.fc.type = cb->type;
 	hdr.fc.security_enabled = cb->secen;
 	hdr.fc.ack_request = cb->ackreq;
+	hdr.fc.intra_pan = intra_pan;
 
 	printk(KERN_INFO "%x", wpan_dev);
 	printk(KERN_INFO "%x", atomic_inc_return(&wpan_dev->dsn));
 
-	hdr.seq = atomic_inc_return(&wpan_dev->dsn) & 0xFF;
+	hdr.seq = (atomic_inc_return(&wpan_dev->dsn)/2) & 0xFF;
 
 	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
 		return -EINVAL;
@@ -349,9 +351,104 @@ ieee802154_header_create( struct sk_buff *skb,
 	return hlen;
 }
 
+static void
+ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		u8 addr_mode, u16 coord_pan_id, u64 coord_addr, u64 src_addr ){
+
+	int r = 0;
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, source_addr;
+	unsigned char *data;
+
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
+
+	//Create beacon frame / payload
+	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	printk( KERN_INFO "Address of the netdev device structure: %x\n", wpan_dev->netdev );
+	printk( KERN_INFO "Address of ieee802154_local * local from wpan_phy_priv: %x\n", local );
+
+	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	sdata->local = local;
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	source_addr.mode = IEEE802154_ADDR_LONG;
+	source_addr.pan_id = 0;
+	source_addr.extended_addr = src_addr;
+
+	dst_addr.mode = addr_mode;
+	dst_addr.pan_id = coord_pan_id;
+
+	if ( IEEE802154_ADDR_SHORT == addr_mode ){
+		dst_addr.short_addr = (u16*)coord_addr;
+	} else {
+		dst_addr.extended_addr = coord_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = true;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = source_addr;
+	cb->dest = dst_addr;
+
+	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
+
+	printk( KERN_INFO "Dest addr: %x\n", dst_addr.short_addr );
+	printk( KERN_INFO "Dest addr long: %x\n", dst_addr.extended_addr );
+	printk( KERN_INFO "Src addr: %x\n", source_addr.short_addr );
+	printk( KERN_INFO "Src addr long: %x\n", source_addr.extended_addr );
+
+	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size, true);
+
+	printk( KERN_INFO "Header is created");
+
+	//Add the mac header to the data
+	r = memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_DATA_REQ;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	printk( KERN_INFO "Data bytes sent out %x",data[0]);
+
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	printk( KERN_INFO "r value is %x", r );
+	if( 0 == r) {
+		goto out;
+	}
+
+error:
+	kfree_skb(skb);
+out:
+	return;
+}
 static int
 ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-		u8 channel_number, u8 channel_page,  u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
+		u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
 		u8 capability_information, u64 src_addr ){
 
 	int r = 0;
@@ -421,7 +518,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	printk( KERN_INFO "Src addr long: %x\n", source_addr.extended_addr );
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size, false);
 
 	printk( KERN_INFO "Header is created");
 
@@ -437,15 +534,32 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	printk( KERN_INFO "r value is %x", r );
+
 	if( 0 == r) {
 		goto out;
 	}
-
 
 error:
 	kfree_skb(skb);
 out:
 	return r;
+}
+
+static int
+ieee802154_register_assoc_req_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		void (*callback)( struct sk_buff *, void *), void *arg )
+{
+	int ret = 0;
+
+	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
+
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->callback = callback;
+	local->listen_flag = 1;
+	local->delayed_work = arg;
+	ret = drv_start( local );
+
+	return ret;
 }
 
 const struct cfg802154_ops mac802154_config_ops = {
@@ -467,4 +581,6 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
 	.assoc_req = ieee802154_assoc_req,
+	.assoc_ack = ieee802154_assoc_ack,
+	.register_assoc_req_listener = ieee802154_register_assoc_req_listener,
 };

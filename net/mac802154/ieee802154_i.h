@@ -61,6 +61,10 @@ struct ieee802154_local {
 	struct tasklet_struct tasklet;
 	struct sk_buff_head skb_queue;
 
+	int (*callback)( struct sk_buff *, void *);
+
+	struct delayed_work *delayed_work;
+	int listen_flag;
 	struct sk_buff *tx_skb;
 	struct work_struct tx_work;
 };
