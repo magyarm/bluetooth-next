@@ -44,7 +44,6 @@ struct work802154 {
 			u8 scan_duration;
 		} ed_scan;
 	} cmd_stuff;
-	int completion_timeout;
 	struct completion completion;
 	struct delayed_work work;
 };
@@ -1536,8 +1535,6 @@ static void nl802154_beacon_work( struct work_struct *work ) {
 
 	rdev = info->user_ptr[0];
 
-	msleep( wrk->completion_timeout );
-
 	rdev_beacon_deregister_listener( rdev );
 
 	complete( &wrk->completion );
@@ -1638,6 +1635,7 @@ static int nl802154_get_beacon_indication( struct sk_buff *skb, struct genl_info
 {
 	int r = 0;
 
+	u16 timeout_ms;
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
 
@@ -1662,12 +1660,12 @@ static int nl802154_get_beacon_indication( struct sk_buff *skb, struct genl_info
 		goto out;
 	}
 
-	wrk->completion_timeout = nla_get_u32( info->attrs[ NL802154_ATTR_BEACON_INDICATION_TIMEOUT ] );
+	timeout_ms = nla_get_u16( info->attrs[ NL802154_ATTR_BEACON_INDICATION_TIMEOUT ] );
 	wrk->info = info;
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_beacon_work );
-	schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
+	schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) );
 	if ( 0 != r ) {
 		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
 		goto free_wrk;
