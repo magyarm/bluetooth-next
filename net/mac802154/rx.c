@@ -98,9 +98,18 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	switch (mac_cb(skb)->type) {
 	case IEEE802154_FC_TYPE_DATA:
+		pr_warn("ieee802154: data frame received (type = %d)\n",
+					mac_cb(skb)->type);
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_ACK:
+		pr_warn("ieee802154: ack frame received (type = %d)\n",
+					mac_cb(skb)->type);
+		goto fail;
 	case IEEE802154_FC_TYPE_MAC_CMD:
+		pr_warn("ieee802154: command frame received (type = %d)\n",
+					mac_cb(skb)->type);
+		pr_warn("Command is type %x", skb->data[0]);
+		goto fail;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);

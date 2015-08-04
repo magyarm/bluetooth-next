@@ -20,8 +20,6 @@
 #include "driver-ops.h"
 #include "cfg.h"
 
-int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata, struct ieee802154_hdr *hdr, const struct ieee802154_mac_cb *cb);
-
 static struct net_device *
 ieee802154_add_iface_deprecated(struct wpan_phy *wpan_phy,
 				const char *name,
@@ -356,69 +354,6 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
-static int
-ieee802154_header_create( struct sk_buff *skb,
-								struct wpan_dev *wpan_dev,
-								unsigned short type,
-								const void *daddr,
-								const void *saddr,
-								unsigned len,
-								bool intra_pan)
-{
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
-	struct ieee802154_hdr hdr;
-	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
-	struct ieee802154_mac_cb *cb = mac_cb(skb);
-	int hlen;
-
-	if (!daddr)
-		return -EINVAL;
-
-	memset(&hdr.fc, 0, sizeof(hdr.fc));
-	hdr.fc.type = cb->type;
-	hdr.fc.security_enabled = cb->secen;
-	hdr.fc.ack_request = cb->ackreq;
-	hdr.fc.intra_pan = intra_pan;
-
-	printk(KERN_INFO "%x", wpan_dev);
-	printk(KERN_INFO "%x", atomic_inc_return(&wpan_dev->dsn));
-
-	hdr.seq = (atomic_inc_return(&wpan_dev->dsn)/2) & 0xFF;
-
-	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
-		return -EINVAL;
-
-	if (!saddr) {
-		if (wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_BROADCAST) ||
-		    wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_UNDEF) ||
-		    wpan_dev->pan_id == cpu_to_le16(IEEE802154_PANID_BROADCAST)) {
-			hdr.source.mode = IEEE802154_ADDR_LONG;
-			hdr.source.extended_addr = wpan_dev->extended_addr;
-		} else {
-			hdr.source.mode = IEEE802154_ADDR_SHORT;
-			hdr.source.short_addr = wpan_dev->short_addr;
-		}
-
-		hdr.source.pan_id = wpan_dev->pan_id;
-	} else {
-		hdr.source = *(const struct ieee802154_addr *)saddr;
-	}
-
-	hdr.dest = *(const struct ieee802154_addr *)daddr;
-
-	hlen = ieee802154_hdr_push(skb, &hdr);
-	if (hlen < 0)
-		return -EINVAL;
-
-	skb_reset_mac_header(skb);
-	skb->mac_len = hlen;
-
-	if (len > ieee802154_max_payload(&hdr))
-		return -EMSGSIZE;
-
-	return hlen;
-}
-
 static void
 ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 addr_mode, u16 coord_pan_id, u64 coord_addr, u64 src_addr ){
@@ -460,15 +395,15 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	source_addr.mode = IEEE802154_ADDR_LONG;
 	source_addr.pan_id = 0;
-	source_addr.extended_addr = src_addr;
+	source_addr.extended_addr = (__le64)src_addr;
 
 	dst_addr.mode = addr_mode;
 	dst_addr.pan_id = coord_pan_id;
 
 	if ( IEEE802154_ADDR_SHORT == addr_mode ){
-		dst_addr.short_addr = (u16*)coord_addr;
+		dst_addr.short_addr = (__le16)coord_addr;
 	} else {
-		dst_addr.extended_addr = coord_addr;
+		dst_addr.extended_addr = (__le64)coord_addr;
 	}
 
 	cb = mac_cb_init(skb);
@@ -490,7 +425,7 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	printk( KERN_INFO "Src addr long: %x\n", source_addr.extended_addr );
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size, true);
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
 
 	printk( KERN_INFO "Header is created");
 
@@ -577,15 +512,15 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	source_addr.mode = IEEE802154_ADDR_LONG;
 	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
-	source_addr.extended_addr = src_addr;
+	source_addr.extended_addr = (__le64)src_addr;
 
 	dst_addr.mode = addr_mode;
 	dst_addr.pan_id = coord_pan_id;
 
 	if ( IEEE802154_ADDR_SHORT == addr_mode ){
-		dst_addr.short_addr = (u16*)coord_addr;
+		dst_addr.short_addr = (__le16)coord_addr;
 	} else {
-		dst_addr.extended_addr = coord_addr;
+		dst_addr.extended_addr = (__le64)coord_addr;
 	}
 
 	cb = mac_cb_init(skb);
@@ -607,9 +542,9 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	dev_dbg( &wpan_dev->netdev->dev, "Src addr long: 0x%016" PRIx64 "\n", source_addr.extended_addr );
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size, false);
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
 
-	printk( KERN_INFO "Header is created");
+	printk( KERN_INFO "Header is created\n");
 
 	//Add the mac header to the data
 	r = memcpy( data, cb, size );
@@ -621,14 +556,12 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	dev_dbg( &wpan_dev->netdev->dev, "Data bytes sent out %x, %x",data[0], data[1]);
 
-	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
-	dev_dbg( &wpan_dev->netdev->dev, "r value is %x", r );
 
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	if( 0 != r) {
 		goto error;
 	}
 
-	r = 0;
 	goto out;
 
 error:
@@ -719,7 +652,7 @@ ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	dev_dbg( &wpan_dev->netdev->dev, "Src addr long: 0x%016" PRIx64 "\n", src_addr.extended_addr );
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size, false);
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 	if ( 0 != r ) {
 		dev_err( &wpan_dev->netdev->dev, "ieee802154_header_create failed (%d)\n", r );
 		goto error;

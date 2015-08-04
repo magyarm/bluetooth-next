@@ -320,7 +320,7 @@ static int mac802154_slave_close(struct net_device *dev)
 	return 0;
 }
 
-int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata,
+static int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata,
 					 struct ieee802154_hdr *hdr,
 					 const struct ieee802154_mac_cb *cb)
 {
@@ -407,6 +407,63 @@ static int mac802154_header_create(struct sk_buff *skb,
 
 	return hlen;
 }
+
+int ieee802154_header_create( struct sk_buff *skb,
+		struct wpan_dev *wpan_dev,
+		unsigned short type,
+		const struct ieee802154_addr *daddr,
+		const struct ieee802154_addr *saddr,
+		unsigned len)
+{
+	struct ieee802154_hdr hdr;
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	struct ieee802154_mac_cb *cb = mac_cb(skb);
+	int hlen;
+	printk(KERN_INFO "now in ieee802154_header_create\n");
+
+	if (!daddr)
+		return -EINVAL;
+
+	memset(&hdr.fc, 0, sizeof(hdr.fc));
+	hdr.fc.type = cb->type;
+	hdr.fc.security_enabled = cb->secen;
+	hdr.fc.ack_request = cb->ackreq;
+	hdr.seq = atomic_inc_return(&wpan_dev->dsn) & 0xFF;
+
+	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
+		return -EINVAL;
+
+	if (!saddr) {
+		if (wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_BROADCAST) ||
+		    wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_UNDEF) ||
+		    wpan_dev->pan_id == cpu_to_le16(IEEE802154_PANID_BROADCAST)) {
+			hdr.source.mode = IEEE802154_ADDR_LONG;
+			hdr.source.extended_addr = wpan_dev->extended_addr;
+		} else {
+			hdr.source.mode = IEEE802154_ADDR_SHORT;
+			hdr.source.short_addr = wpan_dev->short_addr;
+		}
+
+		hdr.source.pan_id = wpan_dev->pan_id;
+	} else {
+		hdr.source = *saddr;
+	}
+
+	hdr.dest = *daddr;
+
+	hlen = ieee802154_hdr_push(skb, &hdr);
+	if (hlen < 0)
+		return -EINVAL;
+
+	skb_reset_mac_header(skb);
+	skb->mac_len = hlen;
+
+	if (len > ieee802154_max_payload(&hdr))
+		return -EMSGSIZE;
+
+	return hlen;
+}
+EXPORT_SYMBOL(ieee802154_header_create);
 
 static int
 mac802154_header_parse(const struct sk_buff *skb, unsigned char *haddr)
