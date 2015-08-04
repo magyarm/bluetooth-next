@@ -550,7 +550,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
-	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	hlen = 18;
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
 
@@ -624,7 +624,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	dev_dbg( &wpan_dev->netdev->dev, "r value is %x", r );
 
-	if( 0 == r) {
+	if( 0 != r) {
 		goto error;
 	}
 
