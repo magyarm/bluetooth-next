@@ -226,6 +226,7 @@ struct ieee802154_mac_cb {
 	bool secen_override;
 	u8 seclevel;
 	bool seclevel_override;
+	bool intra_pan;
 	struct ieee802154_addr source;
 	struct ieee802154_addr dest;
 };

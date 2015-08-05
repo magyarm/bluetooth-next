@@ -370,7 +370,7 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
 
 	//Create beacon frame / payload
-	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	hlen = 18;
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
 
@@ -395,7 +395,7 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	source_addr.mode = IEEE802154_ADDR_LONG;
 	source_addr.pan_id = 0;
-	source_addr.extended_addr = (__le64)src_addr;
+	source_addr.extended_addr = src_addr;
 
 	dst_addr.mode = addr_mode;
 	dst_addr.pan_id = coord_pan_id;
@@ -403,7 +403,7 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	if ( IEEE802154_ADDR_SHORT == addr_mode ){
 		dst_addr.short_addr = (__le16)coord_addr;
 	} else {
-		dst_addr.extended_addr = (__le64)coord_addr;
+		dst_addr.extended_addr = coord_addr;
 	}
 
 	cb = mac_cb_init(skb);
@@ -416,6 +416,8 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	cb->source = source_addr;
 	cb->dest = dst_addr;
+
+	cb->intra_pan = true;
 
 	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
 
@@ -512,7 +514,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	source_addr.mode = IEEE802154_ADDR_LONG;
 	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
-	source_addr.extended_addr = (__le64)src_addr;
+	source_addr.extended_addr = src_addr;
 
 	dst_addr.mode = addr_mode;
 	dst_addr.pan_id = coord_pan_id;
@@ -520,7 +522,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	if ( IEEE802154_ADDR_SHORT == addr_mode ){
 		dst_addr.short_addr = (__le16)coord_addr;
 	} else {
-		dst_addr.extended_addr = (__le64)coord_addr;
+		dst_addr.extended_addr = coord_addr;
 	}
 
 	cb = mac_cb_init(skb);
@@ -702,6 +704,21 @@ ieee802154_register_assoc_req_listener(struct wpan_phy *wpan_phy, struct wpan_de
 	return ret;
 }
 
+static int
+ieee802154_deregister_assoc_req_listener( struct wpan_phy *wpan_phy )
+{
+	int ret = 0;
+
+	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
+
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->callback = NULL;
+	local->listen_flag = NULL;
+	local->delayed_work = NULL;
+
+	return ret;
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -727,5 +744,6 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.assoc_req = ieee802154_assoc_req,
 	.assoc_ack = ieee802154_assoc_ack,
 	.register_assoc_req_listener = ieee802154_register_assoc_req_listener,
+	.deregister_assoc_req_listener = ieee802154_deregister_assoc_req_listener,
 	.disassoc_req = ieee802154_disassoc_req,
 };

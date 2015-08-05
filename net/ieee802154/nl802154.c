@@ -1440,9 +1440,8 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
-	//rdev_deregister_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk );
+	rdev_deregister_assoc_req_listener( rdev );
 
 	nl802154_assoc_cnf( info, assoc_short_address, status );
 
@@ -1568,14 +1567,14 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 			coord_address, capability_information ,
 			src_addr);
 
-	//rdev_set_channel(rdev, channel_page, channel_number);
+	rdev_set_channel(rdev, channel_page, channel_number);
 	printk(KERN_INFO "before rdev call");
 	r = rdev_assoc_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address,
 			capability_information , src_addr);
-	//msleep(10);
-	//r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, src_addr);
+	msleep(50);
+	r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, src_addr);
 
-	//rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_timeout, (void *) wrk );
+	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_timeout, (void *) wrk );
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
