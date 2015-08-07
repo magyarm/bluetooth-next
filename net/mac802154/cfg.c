@@ -367,7 +367,24 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 
-	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
+	struct ieee802154_sub_if_data *sdata;
+	struct ieee802154_local * local;
+	local = wpan_phy_priv(wpan_phy);
+
+	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
+		if (sdata->wpan_dev.iftype != NL802154_IFTYPE_NODE)
+			continue;
+
+		if (!ieee802154_sdata_running(sdata))
+			continue;
+
+		src_addr = sdata->wpan_dev.extended_addr;
+		break;
+	}
+	printk("for ack -> %llx",src_addr);
+	memset( &source_addr, 0, sizeof( src_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
+
 
 	//Create beacon frame / payload
 	hlen = 18;
@@ -379,9 +396,8 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	printk( KERN_INFO "Address of ieee802154_local * local from wpan_phy_priv: %x\n", local );
 
 	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
-	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
 	sdata->local = local;
-
 	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
 	if (!skb){
 		goto error;
@@ -394,7 +410,7 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	data = skb_put(skb, size);
 
 	source_addr.mode = IEEE802154_ADDR_LONG;
-	source_addr.pan_id = 0;
+	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
 	source_addr.extended_addr = src_addr;
 
 	dst_addr.mode = addr_mode;
@@ -480,9 +496,19 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	struct ieee802154_sub_if_data *sdata;
 	struct ieee802154_local * local;
-
 	local = wpan_phy_priv(wpan_phy);
 
+	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
+		if (sdata->wpan_dev.iftype != NL802154_IFTYPE_NODE)
+			continue;
+
+		if (!ieee802154_sdata_running(sdata))
+			continue;
+
+		src_addr = sdata->wpan_dev.extended_addr;
+		break;
+	}
+	printk("for req -> %llx",src_addr);
 	memset( &source_addr, 0, sizeof( src_addr ) );
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
