@@ -281,4 +281,8 @@ enum nl802154_supported_bool_states {
 	NL802154_SUPPORTED_BOOL_MAX = __NL802154_SUPPORTED_BOOL_AFTER_LAST - 1
 };
 
+struct genl_info;
+
+int cfg802154_assoc_resp_send( struct genl_info *info, u16 short_addr, u16 pan_id, u8 status, struct work_struct *assoc_resp_work );
+
 #endif /* __NL802154_H */

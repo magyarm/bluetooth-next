@@ -1353,21 +1353,37 @@ out:
 	return r;
 }
 
-static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status ) {
+static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u16 pan_id, u8 status ) {
 
 	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
 
 	int r;
 
-
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct wpan_dev *wpan_dev = &rdev->wpan_phy.dev;
 	//struct net_device *dev = info->user_ptr[1];
 
     struct sk_buff *reply;
     void *hdr;
 
-	//dev_info( &rdev->wpan_phy.dev, "%s: assoc_short_address: 0x%04x, status: 0x%02x\n", __FUNCTION__, assoc_short_address, status );
-
+    rdev_deregister_assoc_req_listener( rdev );
+	if ( 0 != r ) {
+		printk(KERN_INFO "deregister failed (%d)\n", r );
+		//dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
+		goto out;
+    }
+    r = rdev_set_pan_id(rdev, wpan_dev, pan_id );
+	if ( 0 != r ) {
+		printk(KERN_INFO "set pan id failed (%d)\n", r );
+		//dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
+		goto out;
+    }
+	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
+	if ( 0 != r ) {
+		printk(KERN_INFO "set short addr failed (%d)\n", r );
+		//dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
+		goto out;
+    }
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
@@ -1396,26 +1412,21 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
     r = genlmsg_reply( reply, info );
     goto out;
 
+
+
 nla_put_failure:
 free_reply:
     nlmsg_free( reply );
 out:
-    return;
+    return r;
 }
 
-static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
+int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u16 pan_id, u8 status, struct work_struct *assoc_resp_work ) {
 
-	struct work_struct *work = (struct work_struct *)arg;
-	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
-
-	struct genl_info *info = wrk->info;
-	//struct sk_buff *skb_out = wrk->skb;
+	int ret = 0;
+	struct work802154 *wrk = container_of( to_delayed_work( assoc_resp_work ), struct work802154, work );
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-//	struct net_device *dev = info->user_ptr[1];
-
-	u16 assoc_short_address = IEEE802154_ADDR_BROADCAST;
-	u8 status = MAC_ERR_NO_DATA;
 
 	dev_info( &rdev->wpan_phy.dev, "%s\n", __FUNCTION__ );
 
@@ -1423,16 +1434,19 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
 	// parse data from skb_in
 
-	nl802154_assoc_ack( wrk->skb, wrk->info );
+	ret = nl802154_assoc_cnf( info, short_addr, pan_id, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
+
+	return ret;
 }
 
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	static const u16 assoc_short_address = IEEE802154_ADDR_BROADCAST;
 	static const u8 status = MAC_ERR_NO_ACK;
+	static const u16 pan_id = IEEE802154_PANID_BROADCAST;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
@@ -1441,9 +1455,7 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 
-	rdev_deregister_assoc_req_listener( rdev );
-
-	nl802154_assoc_cnf( info, assoc_short_address, status );
+	nl802154_assoc_cnf( info, assoc_short_address, pan_id, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1569,12 +1581,13 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	rdev_set_channel(rdev, channel_page, channel_number);
 	printk(KERN_INFO "before rdev call");
+
+	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_timeout, info, &wrk->work.work );
+
 	r = rdev_assoc_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address,
-			capability_information , src_addr);
+			capability_information, src_addr);
 	msleep(50);
 	r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, src_addr);
-
-	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_timeout, (void *) wrk );
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );

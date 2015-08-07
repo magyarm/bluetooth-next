@@ -284,11 +284,11 @@ rdev_assoc_ack(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_d
 
 static inline int
 rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-								void (*callback)( struct sk_buff *, void *), void *arg )
+								void (*callback)( struct sk_buff *, void *), struct genl_info *info, struct work_struct *work )
 {
 	int ret = 0;
 
-	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, wpan_dev, callback, arg);
+	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, wpan_dev, callback, info, work);
 
 	return ret;
 }

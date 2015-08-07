@@ -689,7 +689,7 @@ out:
 
 static int
 ieee802154_register_assoc_req_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-		void (*callback)( struct sk_buff *, void *), void *arg )
+		void (*callback)( struct sk_buff *, void *), struct genl_info *info, struct work_struct *work )
 {
 	int ret = 0;
 
@@ -697,8 +697,8 @@ ieee802154_register_assoc_req_listener(struct wpan_phy *wpan_phy, struct wpan_de
 
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	local->callback = callback;
-	local->listen_flag = 1;
-	local->delayed_work = arg;
+	local->assoc_resp_work = work;
+	local->assoc_resp_listener = info;
 	ret = drv_start( local );
 
 	return ret;
@@ -713,10 +713,14 @@ ieee802154_deregister_assoc_req_listener( struct wpan_phy *wpan_phy )
 
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	local->callback = NULL;
-	local->listen_flag = NULL;
-	local->delayed_work = NULL;
-
+	local->assoc_resp_work = NULL;
+	local->assoc_resp_listener = NULL;
 	return ret;
+}
+
+int cfg802154_assoc_resp_send( struct genl_info *info, u16 short_addr, u16 pan_id, u8 status, struct work_struct *assoc_resp_work )
+{
+	return nl802154_assoc_req_complete( info, short_addr, pan_id, status, assoc_resp_work );
 }
 
 const struct cfg802154_ops mac802154_config_ops = {
