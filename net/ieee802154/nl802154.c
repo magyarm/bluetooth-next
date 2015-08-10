@@ -1384,7 +1384,7 @@ int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 stat
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	static const u16 assoc_short_address = IEEE802154_ADDR_BROADCAST;
-	static const u8 status = MAC_ERR_NO_ACK;
+	static const u8 status = MAC_ERR_NO_DATA;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
@@ -1521,13 +1521,6 @@ free_wrk:
 	kfree( wrk );
 
 out:
-	return r;
-}
-
-static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
-{
-	int r;
-	r = -ENOSYS;
 	return r;
 }
 
