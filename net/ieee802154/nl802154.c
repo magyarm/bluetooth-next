@@ -1979,14 +1979,6 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_ASSOC_RSP,
-		.doit = nl802154_assoc_rsp,
-		.policy = nl802154_policy,
-		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_NETDEV |
-				  NL802154_FLAG_NEED_RTNL,
-	},
-	{
 		.cmd = NL802154_CMD_DISASSOC_REQ,
 		.doit = nl802154_disassoc_req,
 		.policy = nl802154_policy,
