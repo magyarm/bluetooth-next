@@ -78,8 +78,8 @@ struct cfg802154_ops {
 				u8 capability_information );
 	int (*assoc_ack)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 				u8 addr_mode, u16 coord_pan_id, u64 coord_addr );
-	int (*register_assoc_req_listener)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-			void (*callback)( struct sk_buff *, void *), struct genl_info *info, struct work_struct *work );
+	int (*register_assoc_req_listener)(struct wpan_phy *wpan_phy,
+				struct genl_info *info, struct work_struct *work );
 	int (*deregister_assoc_req_listener)( struct wpan_phy *wpan_phy );
 	int	(*disassoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 						u16 device_panid, u64 device_address,

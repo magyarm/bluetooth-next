@@ -1306,83 +1306,35 @@ enum {
 	MAC_ERR_INVALID_PARAMETER,
 };
 
-static int nl802154_assoc_ack( struct sk_buff *skb, struct genl_info *info ){
-
+static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status )
+{
 	int r;
-	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
+	struct cfg802154_registered_device *rdev;
+	struct wpan_dev *wpan_dev;
+	struct net_device *dev;
+
+	struct sk_buff *reply;
+	void *hdr;
+
 	r = 0;
-	/*
-	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	//	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = &rdev->wpan_phy.dev;
-
-	u32 timeout_ms = 5000;
-
-	struct work802154 *wrk;
-
-	rdev_assoc_ack( rdev, wpan_dev );
-
-	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-	if ( NULL == wrk ) {
-		dev_err( &rdev->wpan_phy.dev, "Could not allocate work for assoc_ack\n");
-		goto out;
-	}
-
-	rdev_register_assoc_req_listener(rdev, wpan_dev, nl802154_assoc_req_complete, (void *) wrk->work );
-
-	wrk->cmd = NL802154_CMD_ASSOC_REQ;
-	wrk->skb = skb;
-	wrk->info = info;
-
-	init_completion( &wrk->completion );
-	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
-	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
-	if ( 0 != r ) {
-		dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
-		goto free_wrk;
-	}
-
-	wait_for_completion( &wrk->completion );
-
-	goto out;
-
-free_wrk:
-	kfree( wrk );
-*/
-out:
-	return r;
-}
-
-static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status ) {
-
-	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
-
-	int r;
-
-	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct wpan_dev *wpan_dev = &rdev->wpan_phy.dev;
-	//struct net_device *dev = info->user_ptr[1];
-
-    struct sk_buff *reply;
-    void *hdr;
+	rdev = info->user_ptr[0];
+	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
+	dev = (struct net_device *) wpan_dev->netdev;
 
     rdev_deregister_assoc_req_listener( rdev );
 	if ( 0 != r ) {
-		printk(KERN_INFO "deregister failed (%d)\n", r );
-		//dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
+		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
 		goto out;
     }
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
-		printk(KERN_INFO "set short addr failed (%d)\n", r );
-		//dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
+		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
 		goto out;
     }
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
-        printk(KERN_INFO "nlmsg_new failed (%d)\n", r );
-        //dev_err( &rdev->wpan_phy.dev, "nlmsg_new failed (%d)\n", r );
+        dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
         goto out;
     }
 
@@ -1396,8 +1348,7 @@ static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, 
         nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
         nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
     if ( 0 != r ) {
-        printk(KERN_INFO "nla_put_failure (%d)\n", r );
-        //dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
+        dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
         goto nla_put_failure;
     }
 
@@ -1420,11 +1371,7 @@ int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 stat
 	int ret = 0;
 	struct work802154 *wrk = container_of( to_delayed_work( assoc_resp_work ), struct work802154, work );
 
-	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-
 	cancel_delayed_work( &wrk->work );
-
-	// parse data from skb_in
 
 	ret = nl802154_assoc_cnf( info, short_addr, status );
 
@@ -1438,14 +1385,10 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	static const u16 assoc_short_address = IEEE802154_ADDR_BROADCAST;
 	static const u8 status = MAC_ERR_NO_ACK;
-	static const u16 pan_id = IEEE802154_PANID_BROADCAST;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
-
-	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
 
 	nl802154_assoc_cnf( info, assoc_short_address, status );
 
@@ -1455,7 +1398,6 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 {
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	int r;
 
 	u8 channel_number;
@@ -1464,11 +1406,6 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	u16 coord_pan_id;
 	u64 coord_address;
 	u8 capability_information;
-//	XXX: TODO
-//	u32 security_level;
-//	u32 key_id_mode;
-//	u64 key_source;
-//	u32 key_index;
 	u32 timeout_ms = 10000;
 
 	struct cfg802154_registered_device *rdev;
@@ -1477,8 +1414,8 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	struct net_device *dev;
 
 	rdev = info->user_ptr[0];
-	dev = info->user_ptr[1];
-	wpan_dev = &rdev->wpan_phy.dev;
+	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
+	dev = (struct net_device *) &wpan_dev->netdev;
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_CHANNEL ] &&
@@ -1491,7 +1428,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		) &&
 		info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ]
 	) ) {
-		dev_err( &rdev->wpan_phy.dev, "invalid arguments\n" );
+		dev_err( &dev->dev, "invalid arguments\n" );
 		r = -EINVAL;
 		goto out;
 	}
@@ -1515,20 +1452,19 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		}
 		/* no break */
 	default:
-		//dev_err( &rdev->wpan_phy.dev, "invalid address / mode combination\n" );
+		dev_err( &dev->dev, "invalid address / mode combination\n" );
 		r = -EINVAL;
 		goto out;
 	}
 	capability_information = nla_get_u8( info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] );
-	printk(KERN_INFO "cap_ifo: %d",capability_information);
 	if ( channel_page > IEEE802154_MAX_PAGE ) {
-		//dev_err( &rdev->wpan_phy.dev, "invalid channel_page %u\n", channel_page );
+		dev_err( &dev->dev, "invalid channel_page %u\n", channel_page );
 		r = -EINVAL;
 		goto out;
 	}
 
 	if ( BIT( channel_number ) & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-		//dev_err( &rdev->wpan_phy.dev, "invalid channel_number %u\n", channel_number );
+		dev_err( &dev->dev, "invalid channel_number %u\n", channel_number );
 		r = -EINVAL;
 		goto out;
 	}
@@ -1538,50 +1474,41 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		r = -ENOMEM;
 		goto out;
 	}
+
 	wrk->skb = skb;
 	wrk->info = info;
-/*
-	dev_err( &rdev->wpan_phy.dev,"sending to rdev assoc req");
-	dev_err( &rdev->wpan_phy.dev,
-			"channel number: %x\n"
-			"channel page: %x\n"
-			"coord addr mode: %x\n"
-			"coord pan id: %x\n"
-			"coord address: %llx\n"
-			"capability_information: %x\n"
-			"source address: %llx\n",
-			channel_number, channel_page,
-			coord_addr_mode, coord_pan_id,
-			coord_address, capability_information ,
-			src_addr);
-*/
-	printk(KERN_INFO "sending to rdev assoc req");
-	printk(KERN_INFO
-			"channel number: %x\n"
-			"channel page: %x\n"
-			"coord addr mode: %x\n"
-			"coord pan id: %x\n"
-			"coord address: %llx\n"
-			"capability_information: %x\n",
-			channel_number, channel_page,
-			coord_addr_mode, coord_pan_id,
-			coord_address, capability_information);
 
-	rdev_set_channel(rdev, channel_page, channel_number);
-	printk(KERN_INFO "before rdev call");
+	r = rdev_set_channel(rdev, channel_page, channel_number);
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "rdev_set_channel failed (%d)\n", r );
+		goto free_wrk;
+	}
 
-	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_timeout, info, &wrk->work.work );
+	r = rdev_register_assoc_req_listener( rdev, info, &wrk->work.work );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "register assoc_req listener failed (%d)\n", r );
+		goto free_wrk;
+	}
 
 	r = rdev_assoc_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address,
 			capability_information );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "send assoc_req failed (%d)\n", r );
+		goto free_wrk;
+	}
+
 	msleep(50);
 	r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "ack assoc_req failed (%d)\n", r );
+		goto free_wrk;
+	}
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
 	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
-		dev_err( &rdev->wpan_phy.dev, "schedule_delayed_work failed (%d)\n", r );
+		dev_err( &dev->dev, "schedule_delayed_work failed (%d)\n", r );
 		goto free_wrk;
 	}
 

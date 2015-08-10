@@ -74,7 +74,6 @@ rdev_del_virtual_intf(struct cfg802154_registered_device *rdev,
 static inline int
 rdev_set_channel(struct cfg802154_registered_device *rdev, u8 page, u8 channel)
 {
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	int ret;
 
 	trace_802154_rdev_set_channel(&rdev->wpan_phy, page, channel);
@@ -281,12 +280,12 @@ rdev_assoc_ack(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_d
 }
 
 static inline int
-rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-								void (*callback)( struct sk_buff *, void *), struct genl_info *info, struct work_struct *work )
+rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev,
+		struct genl_info *info, struct work_struct *work )
 {
 	int ret = 0;
 
-	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, wpan_dev, callback, info, work);
+	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, info, work);
 
 	return ret;
 }

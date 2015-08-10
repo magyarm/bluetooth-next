@@ -354,7 +354,7 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
-static void
+static int
 ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 addr_mode, u16 coord_pan_id, u64 coord_addr ){
 
@@ -365,11 +365,11 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	struct ieee802154_addr dst_addr, source_addr;
 	unsigned char *data;
 	u64 src_addr;
-
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
-
 	struct ieee802154_sub_if_data *sdata;
 	struct ieee802154_local * local;
+
+	src_addr = -1;
+
 	local = wpan_phy_priv(wpan_phy);
 
 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
@@ -382,19 +382,14 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		src_addr = sdata->wpan_dev.extended_addr;
 		break;
 	}
-	printk("for ack -> %llx",src_addr);
-	memset( &source_addr, 0, sizeof( src_addr ) );
-	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
+	memset( &source_addr, 0, sizeof( source_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
 	hlen = 18;
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
-
-	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
-	printk( KERN_INFO "Address of the netdev device structure: %x\n", wpan_dev->netdev );
-	printk( KERN_INFO "Address of ieee802154_local * local from wpan_phy_priv: %x\n", local );
 
 	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
 	sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
@@ -436,29 +431,17 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	cb->intra_pan = true;
 
-	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
-
-	printk( KERN_INFO "Dest addr: %x\n", dst_addr.short_addr );
-	printk( KERN_INFO "Dest addr long: %x\n", dst_addr.extended_addr );
-	printk( KERN_INFO "Src addr: %x\n", source_addr.short_addr );
-	printk( KERN_INFO "Src addr long: %x\n", source_addr.extended_addr );
-
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
 	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
 
-	printk( KERN_INFO "Header is created");
-
 	//Add the mac header to the data
-	r = memcpy( data, cb, size );
+	memcpy( data, cb, size );
 	data[0] = IEEE802154_CMD_DATA_REQ;
 
 	skb->dev = wpan_dev->netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	printk( KERN_INFO "Data bytes sent out %x",data[0]);
-
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
-	printk( KERN_INFO "r value is %x", r );
 	if( 0 == r) {
 		goto out;
 	}
@@ -466,7 +449,7 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 error:
 	kfree_skb(skb);
 out:
-	return;
+	return r;
 }
 
 static inline bool is_extended_address( u64 addr ) {
@@ -497,6 +480,9 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	u64 src_addr;
 	struct ieee802154_sub_if_data *sdata;
 	struct ieee802154_local * local;
+
+	src_addr = -1;
+
 	local = wpan_phy_priv(wpan_phy);
 
 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
@@ -509,8 +495,8 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		src_addr = sdata->wpan_dev.extended_addr;
 		break;
 	}
-	printk("for req -> %llx",src_addr);
-	memset( &source_addr, 0, sizeof( src_addr ) );
+
+	memset( &source_addr, 0, sizeof( source_addr ) );
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
@@ -573,10 +559,8 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
 	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
 
-	printk( KERN_INFO "Header is created\n");
-
 	//Add the mac header to the data
-	r = memcpy( data, cb, size );
+	memcpy( data, cb, size );
 	data[0] = IEEE802154_CMD_ASSOCIATION_REQ;
 	data[1] = capability_information;
 
@@ -715,15 +699,11 @@ out:
 }
 
 static int
-ieee802154_register_assoc_req_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-		void (*callback)( struct sk_buff *, void *), struct genl_info *info, struct work_struct *work )
+ieee802154_register_assoc_req_listener(struct wpan_phy *wpan_phy, struct genl_info *info, struct work_struct *work )
 {
 	int ret = 0;
 
-	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
-
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->callback = callback;
 	local->assoc_resp_work = work;
 	local->assoc_resp_listener = info;
 	ret = drv_start( local );
@@ -736,10 +716,7 @@ ieee802154_deregister_assoc_req_listener( struct wpan_phy *wpan_phy )
 {
 	int ret = 0;
 
-	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
-
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->callback = NULL;
 	local->assoc_resp_work = NULL;
 	local->assoc_resp_listener = NULL;
 	return ret;
