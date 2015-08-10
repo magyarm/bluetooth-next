@@ -1353,7 +1353,7 @@ out:
 	return r;
 }
 
-static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u16 pan_id, u8 status ) {
+static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status ) {
 
 	printk(KERN_INFO "Inside %s\n",__FUNCTION__);
 
@@ -1369,12 +1369,6 @@ static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, 
     rdev_deregister_assoc_req_listener( rdev );
 	if ( 0 != r ) {
 		printk(KERN_INFO "deregister failed (%d)\n", r );
-		//dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
-		goto out;
-    }
-    r = rdev_set_pan_id(rdev, wpan_dev, pan_id );
-	if ( 0 != r ) {
-		printk(KERN_INFO "set pan id failed (%d)\n", r );
 		//dev_err( &rdev->wpan_phy.dev, "nla_put_failure (%d)\n", r );
 		goto out;
     }
@@ -1421,20 +1415,18 @@ out:
     return r;
 }
 
-int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u16 pan_id, u8 status, struct work_struct *assoc_resp_work ) {
+int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work ) {
 
 	int ret = 0;
 	struct work802154 *wrk = container_of( to_delayed_work( assoc_resp_work ), struct work802154, work );
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 
-	dev_info( &rdev->wpan_phy.dev, "%s\n", __FUNCTION__ );
-
 	cancel_delayed_work( &wrk->work );
 
 	// parse data from skb_in
 
-	ret = nl802154_assoc_cnf( info, short_addr, pan_id, status );
+	ret = nl802154_assoc_cnf( info, short_addr, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1455,7 +1447,7 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 
-	nl802154_assoc_cnf( info, assoc_short_address, pan_id, status );
+	nl802154_assoc_cnf( info, assoc_short_address, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1472,7 +1464,6 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	u16 coord_pan_id;
 	u64 coord_address;
 	u8 capability_information;
-	u64 src_addr;
 //	XXX: TODO
 //	u32 security_level;
 //	u32 key_id_mode;
@@ -1505,7 +1496,6 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto out;
 	}
 
-	src_addr = wpan_dev->extended_addr;
 	channel_number = nla_get_u8( info->attrs[ NL802154_ATTR_CHANNEL ] );
 	channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
 	coord_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
@@ -1572,12 +1562,10 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 			"coord addr mode: %x\n"
 			"coord pan id: %x\n"
 			"coord address: %llx\n"
-			"capability_information: %x\n"
-			"source address: %llx\n",
+			"capability_information: %x\n",
 			channel_number, channel_page,
 			coord_addr_mode, coord_pan_id,
-			coord_address, capability_information ,
-			src_addr);
+			coord_address, capability_information);
 
 	rdev_set_channel(rdev, channel_page, channel_number);
 	printk(KERN_INFO "before rdev call");
@@ -1585,9 +1573,9 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	rdev_register_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_timeout, info, &wrk->work.work );
 
 	r = rdev_assoc_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address,
-			capability_information, src_addr);
+			capability_information );
 	msleep(50);
-	r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, src_addr);
+	r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );

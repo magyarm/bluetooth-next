@@ -75,10 +75,9 @@ struct cfg802154_ops {
 	            u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 	int (*assoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 				u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
-				u8 capability_information, u64 src_addr );
+				u8 capability_information );
 	int (*assoc_ack)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-				u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
-				u64 src_addr );
+				u8 addr_mode, u16 coord_pan_id, u64 coord_addr );
 	int (*register_assoc_req_listener)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 			void (*callback)( struct sk_buff *, void *), struct genl_info *info, struct work_struct *work );
 	int (*deregister_assoc_req_listener)( struct wpan_phy *wpan_phy );
@@ -254,6 +253,6 @@ static inline const char *wpan_phy_name(struct wpan_phy *phy)
 	return dev_name(&phy->dev);
 }
 
-int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u16 pan_id, u8 status, struct work_struct *assoc_resp_work );
+int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work );
 
 #endif /* __NET_CFG802154_H */

@@ -31,7 +31,6 @@
 
 struct work_assoc_resp_receive{
 	u16 short_addr;
-	u16 pan_id;
 	u8 status;
 	struct genl_info *assoc_resp_listener;
 	struct work_struct *assoc_resp_work;
@@ -52,7 +51,7 @@ static void rx_assoc_resp_receive_work ( struct work_struct *work ){
 
 	wrk = container_of( work, struct work_assoc_resp_receive, work );
 
-	cfg802154_assoc_resp_send( wrk->assoc_resp_listener, wrk->short_addr, wrk->pan_id, wrk->status, wrk->assoc_resp_work);
+	cfg802154_assoc_resp_send( wrk->assoc_resp_listener, wrk->short_addr, wrk->status, wrk->assoc_resp_work);
 
 	kfree( wrk );
 	return;
@@ -74,10 +73,8 @@ static int ieee802154_assoc_resp(struct sk_buff *skb, struct ieee802154_hdr *hdr
 	skb->protocol = htons(ETH_P_IEEE802154);
 
 	u16 short_addr;
-	u16 pan_id;
 	u8 status;
 
-	pan_id = hdr->dest.pan_id;
 	short_addr = skb->data[1] << 8 | skb->data[2];
 	status = skb->data[3];
 
@@ -86,7 +83,6 @@ static int ieee802154_assoc_resp(struct sk_buff *skb, struct ieee802154_hdr *hdr
 	wrk->assoc_resp_work = local->assoc_resp_work;
 
 	wrk->short_addr = short_addr;
-	wrk->pan_id = pan_id;
 	wrk->status = status;
 
 	INIT_WORK( &wrk->work, rx_assoc_resp_receive_work );

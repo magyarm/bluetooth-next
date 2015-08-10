@@ -356,7 +356,7 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 static void
 ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-		u8 addr_mode, u16 coord_pan_id, u64 coord_addr, u64 src_addr ){
+		u8 addr_mode, u16 coord_pan_id, u64 coord_addr ){
 
 	int r = 0;
 	struct sk_buff *skb;
@@ -364,6 +364,7 @@ ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	int hlen, tlen, size;
 	struct ieee802154_addr dst_addr, source_addr;
 	unsigned char *data;
+	u64 src_addr;
 
 	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 
@@ -484,7 +485,7 @@ static inline bool is_short_address( u16 addr ) {
 static int
 ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
-		u8 capability_information, u64 src_addr ){
+		u8 capability_information ){
 
 	int r;
 
@@ -493,7 +494,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	int hlen, tlen, size;
 	struct ieee802154_addr dst_addr, source_addr;
 	unsigned char *data;
-
+	u64 src_addr;
 	struct ieee802154_sub_if_data *sdata;
 	struct ieee802154_local * local;
 	local = wpan_phy_priv(wpan_phy);
@@ -744,9 +745,9 @@ ieee802154_deregister_assoc_req_listener( struct wpan_phy *wpan_phy )
 	return ret;
 }
 
-int cfg802154_assoc_resp_send( struct genl_info *info, u16 short_addr, u16 pan_id, u8 status, struct work_struct *assoc_resp_work )
+int cfg802154_assoc_resp_send( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work )
 {
-	return nl802154_assoc_req_complete( info, short_addr, pan_id, status, assoc_resp_work );
+	return nl802154_assoc_req_complete( info, short_addr, status, assoc_resp_work );
 }
 
 const struct cfg802154_ops mac802154_config_ops = {
