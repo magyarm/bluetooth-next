@@ -1521,7 +1521,6 @@ free_wrk:
 	kfree( wrk );
 
 out:
-printk(KERN_INFO "returning out of nl802154_assoc_req with return value: %d\n", r);
 	return r;
 }
 

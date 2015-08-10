@@ -57,11 +57,14 @@ static void rx_assoc_resp_receive_work ( struct work_struct *work ){
 	return;
 }
 
-static int ieee802154_assoc_resp(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct ieee802154_local *local){
+static int ieee802154_assoc_resp(struct sk_buff *skb, con struct ieee802154_hdr *hdr, struct ieee802154_local *local){
 	int ret = 0;
 
 	struct genl_info *info;
 	struct work_assoc_resp_receive *wrk;
+
+	u16 short_addr;
+	u8 status;
 
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
 	if ( NULL == wrk ) {
@@ -71,9 +74,6 @@ static int ieee802154_assoc_resp(struct sk_buff *skb, struct ieee802154_hdr *hdr
 
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
-
-	u16 short_addr;
-	u8 status;
 
 	short_addr = skb->data[1] << 8 | skb->data[2];
 	status = skb->data[3];
@@ -164,10 +164,11 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	case IEEE802154_FC_TYPE_MAC_CMD:
 		pr_warn("ieee802154: command frame received (type = %d)\n",
 					mac_cb(skb)->type);
-		pr_warn("Command is type %x", skb->data[0]);
+		pr_warn("ieee802154: command frame is type %x", skb->data[0]);
+		pr_warn("ieee802154: command frame DSN is (DSN = %x)\n",
+							hdr->seq);
 		if( 0x2 == skb->data[0] ){
 			if ( sdata->local->assoc_resp_listener  && sdata->local->assoc_resp_work ){
-				printk( KERN_INFO "Received Association Response frame");
 				return ieee802154_assoc_resp(skb, hdr, sdata->local);
 			}
 		}
@@ -176,6 +177,8 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
+		pr_warn("ieee802154: bad frame DSN is (DSN = %x)\n",
+									hdr->seq);
 		goto fail;
 	}
 

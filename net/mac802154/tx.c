@@ -68,7 +68,6 @@ err_tx:
 static netdev_tx_t
 ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 {
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct net_device *dev = skb->dev;
 	int ret;
 
@@ -102,7 +101,6 @@ ieee802154_tx(struct ieee802154_local *local, struct sk_buff *skb)
 	return NETDEV_TX_OK;
 
 err_tx:
-	printk(KERN_INFO "ERROR Inside %s\n", __FUNCTION__);
 	kfree_skb(skb);
 	return NETDEV_TX_OK;
 }
@@ -120,7 +118,6 @@ ieee802154_monitor_start_xmit(struct sk_buff *skb, struct net_device *dev)
 netdev_tx_t
 ieee802154_subif_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(dev);
 	int rc;
 

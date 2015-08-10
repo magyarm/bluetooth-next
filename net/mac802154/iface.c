@@ -419,7 +419,6 @@ int ieee802154_header_create( struct sk_buff *skb,
 	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
 	struct ieee802154_mac_cb *cb = mac_cb(skb);
 	int hlen;
-	printk(KERN_INFO "now in ieee802154_header_create\n");
 
 	if (!daddr)
 		return -EINVAL;
