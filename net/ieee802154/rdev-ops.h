@@ -255,7 +255,7 @@ rdev_ed_scan(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev
 
 static inline int
 rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-				u8 coord_addr_mode, u16 coord_pan_id, u64 coord_address,
+				u8 channel_number, u8 channel_page, u8 coord_addr_mode, u16 coord_pan_id, u64 coord_address,
 				u8 capability_information )
 {
 	int ret = 0;

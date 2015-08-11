@@ -1494,7 +1494,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	r = rdev_assoc_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address,
+	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
 			capability_information );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "send assoc_req failed (%d)\n", r );
@@ -1528,6 +1528,12 @@ out:
 	return r;
 }
 
+static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
+{
+	int r;
+	r = -ENOSYS;
+	return r;
+}
 static inline bool is_extended_address( u64 addr ) {
 	static const u64 mask = ~((1 << 16) - 1);
 	return mask & addr;
@@ -1980,6 +1986,14 @@ static const struct genl_ops nl802154_ops[] = {
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_ASSOC_RSP,
+		.doit = nl802154_assoc_rsp,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
