@@ -1410,7 +1410,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 //	u32 key_id_mode;
 //	u64 key_source;
 //	u32 key_index;
-	u32 timeout_ms = 10000;
+	u16 timeout_ms;
 
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
@@ -1430,7 +1430,8 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 			info->attrs[ NL802154_ATTR_SHORT_ADDR ] ||
 			info->attrs[ NL802154_ATTR_EXTENDED_ADDR ]
 		) &&
-		info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ]
+		info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] &&
+		info->attrs[ NL802154_ATTR_ASSOC_TIMEOUT_MS ]
 	) ) {
 		dev_err( &dev->dev, "invalid arguments\n" );
 		r = -EINVAL;
@@ -1441,6 +1442,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
 	coord_addr_mode = nla_get_u8( info->attrs[ NL802154_ATTR_ADDR_MODE ] );
 	coord_pan_id = nla_get_u16( info->attrs[ NL802154_ATTR_PAN_ID ] );
+	timeout_ms = nla_get_u16( info->attrs[ NL802154_ATTR_ASSOC_TIMEOUT_MS ]);
 
 	switch( coord_addr_mode ) {
 	case IEEE802154_ADDR_SHORT:
