@@ -154,31 +154,17 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	switch (mac_cb(skb)->type) {
 	case IEEE802154_FC_TYPE_DATA:
-		pr_warn("ieee802154: data frame received (type = %d)\n",
-					mac_cb(skb)->type);
 		return ieee802154_deliver_skb(skb);
-	case IEEE802154_FC_TYPE_ACK:
-		pr_warn("ieee802154: ack frame received (type = %d)\n",
-					mac_cb(skb)->type);
-		goto fail;
 	case IEEE802154_FC_TYPE_MAC_CMD:
-		pr_warn("ieee802154: command frame received (type = %d)\n",
-					mac_cb(skb)->type);
-		pr_warn("ieee802154: command frame is type %x", skb->data[0]);
-		pr_warn("ieee802154: command frame DSN is (DSN = %x)\n",
-							hdr->seq);
 		if( 0x2 == skb->data[0] ){
 			if ( sdata->local->assoc_resp_listener  && sdata->local->assoc_resp_work ){
 				return ieee802154_assoc_resp(skb, hdr, sdata->local);
 			}
 		}
-
 		goto fail;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
-		pr_warn("ieee802154: bad frame DSN is (DSN = %x)\n",
-									hdr->seq);
 		goto fail;
 	}
 
