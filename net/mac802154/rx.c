@@ -57,7 +57,7 @@ static void rx_assoc_resp_receive_work ( struct work_struct *work ){
 	return;
 }
 
-static int ieee802154_assoc_resp(struct sk_buff *skb, con struct ieee802154_hdr *hdr, struct ieee802154_local *local){
+static int ieee802154_assoc_resp(struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct ieee802154_local *local){
 	int ret = 0;
 
 	struct genl_info *info;
