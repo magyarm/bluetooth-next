@@ -1287,6 +1287,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	if( IEEE802154_MAX_CHANNEL == current_channel || status != 0) {
 		//Add the remaining MLME-SCAN.confirm parameters as netlink attributes and send
 		status = nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, wrk->cmd_stuff.active_scan.result_list_size );
+//		status = nl802154_active_scan_put_pan_descriptors( reply, result_list_size, pan_descriptor_list ;)
 
 		if ( 0 != status ) {
 			dev_err( &dev->dev, "nla_put_failure (%d)\n", status );
@@ -1310,40 +1311,65 @@ out:
 	return;
 }
 
-int nl802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work )
+int nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, struct ieee802154_hdr *receive_hdr, struct work_struct *active_scan_work )
 {
 	int ret = 0;
-
+	struct ieee802154_beacon_indication beacon_notify;
 	struct net *net;
-	struct nlattr *nl_pan_desc;
+	struct nlattr *nl_pan_desc_entry;
 
 	struct work802154 *wrk;
 
 	wrk = container_of( to_delayed_work( active_scan_work ), struct work802154, work );
 
-	nl_pan_desc = nla_nest_start( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESCRIPTOR );
-	if (nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify->pan_desc.src_addr_mode ) ||
-			nla_put_u16( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify->pan_desc.src_pan_id) ||
-			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify->pan_desc.src_addr) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify->pan_desc.channel_num) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify->pan_desc.channel_page) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify->pan_desc.superframe_spec) ||
-			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify->pan_desc.gts_permit) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_LQI, beacon_notify->pan_desc.lqi) ||
-			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify->pan_desc.time_stamp) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify->pan_desc.sec_status) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify->pan_desc.sec_level) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify->pan_desc.key_id_mode) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify->pan_desc.key_src) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify->pan_desc.key_index)) {
+	beacon_notify.pan_desc.src_addr_mode   = receive_hdr->fc.source_addr_mode;
+
+	if ( IEEE802154_ADDR_LONG == ind.pan_desc.src_addr_mode ) {
+		ind.pan_desc.src_addr = mac_cb(skb)->source.extended_addr;
+	}
+	else if ( IEEE802154_ADDR_SHORT == ind.pan_desc.src_addr_mode ) {
+		ind.pan_desc.src_addr = mac_cb(skb)->source.short_addr;
+	}
+
+	/* The Source PAN Identifier and Source Address fields contain the PAN identifier and address,
+	 * respectively, of the device transmitting the beacon. */
+	ind.pan_desc.src_addr        = mac_cb(skb)->source.short_addr;
+	ind.pan_desc.src_pan_id      = mac_cb(skb)->source.pan_id;
+	ind.pan_desc.channel_num     = phy->current_channel;
+	ind.pan_desc.channel_page    = phy->current_page;
+	ind.pan_desc.superframe_spec = 0;
+	ind.pan_desc.gts_permit      = 0;
+	ind.pan_desc.lqi             = mac_cb(skb)->lqi;
+	ind.pan_desc.time_stamp      = 0;
+	ind.pan_desc.sec_status      = 0;
+	ind.pan_desc.sec_level       = mac_cb(skb)->seclevel;
+	ind.pan_desc.key_id_mode     = receive_hdr->sec.key_id_mode;
+	ind.pan_desc.key_src         = 0;
+	ind.pan_desc.key_index       = receive_hdr->sec.key_id;
+
+	nl_pan_desc_entry = nla_nest_start( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESCRIPTOR );
+	if (nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify.pan_desc.src_addr_mode ) ||
+			nla_put_u16( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify.pan_desc.src_pan_id) ||
+			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify.pan_desc.src_addr) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify.pan_desc.channel_num) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify.pan_desc.channel_page) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify.pan_desc.superframe_spec) ||
+			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify.pan_desc.gts_permit) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_LQI, beacon_notify.pan_desc.lqi) ||
+			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify.pan_desc.time_stamp) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify.pan_desc.sec_status) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify.pan_desc.sec_level) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify.pan_desc.key_id_mode) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify.pan_desc.key_src) ||
+			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify.pan_desc.key_index)) {
 		ret = -ENOBUFS;
 		goto free_reply;
 	}
-	nla_nest_end( wrk->cmd_stuff.active_scan.reply, nl_pan_desc );
+	nla_nest_end( wrk->cmd_stuff.active_scan.reply, nl_pan_desc_entry );
 
-	net = genl_info_net(info);
+	net = genl_info_net(wrk->info);
 
-	ret = genlmsg_reply( wrk->cmd_stuff.active_scan.reply, info);
+	ret = genlmsg_reply( wrk->cmd_stuff.active_scan.reply, wrk->info);
 
 	wrk->cmd_stuff.active_scan.result_list_size++;
 
@@ -1367,9 +1393,12 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
 	struct device *dev;
+	struct net_device *netdev;
+	void (*cnf)( struct work_struct * ) = NULL;
 
 	rdev = info->user_ptr[0];
 	dev = &rdev->wpan_phy.dev;
+	netdev = NULL;
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1399,21 +1428,21 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-	if ( NULL == wrk ) {
-		r = -ENOMEM;
-		goto out;
-	}
+		if ( NULL == wrk ) {
+			r = -ENOMEM;
+			goto out;
+		}
 
-	wrk->skb = skb;
-	wrk->info = info;
-
-	if( IEEE802154_MAC_SCAN_ED == scan_type ) {
+	switch( scan_type ) {
+	case IEEE802154_MAC_SCAN_ED:
 		wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
 		wrk->cmd_stuff.ed_scan.channel_page = channel_page;
 		wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
 		wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
-		INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
-	}else if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
+		cnf = nl802154_ed_scan_cnf;
+		break;
+	case IEEE802154_MAC_SCAN_ACTIVE:
+		netdev = info->user_ptr[1];
 		wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
 		wrk->cmd_stuff.active_scan.channel_page = channel_page;
 		wrk->cmd_stuff.active_scan.scan_channels = scan_channels;
@@ -1421,7 +1450,21 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 		wrk->cmd_stuff.active_scan.result_list_size = 0; //Initalize the result list
 		wrk->cmd_stuff.active_scan.current_channel = 0;
 		wrk->cmd_stuff.active_scan.status = IEEE802154_SUCCESS;
+		cnf = nl802154_active_scan_cnf;
+		break;
+	default:
+		dev_err( dev, "invalid scan type %u\n", scan_type );
+		r = -EINVAL;
+		goto out;
+		break;
+	}
 
+	wrk->skb = skb;
+	wrk->info = info;
+
+	INIT_DELAYED_WORK( &wrk->work, cnf );
+
+	if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
 		//Initialize the netlink reply and header on the first entry to active scan work
 		wrk->cmd_stuff.active_scan.reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
 		if ( NULL == wrk->cmd_stuff.active_scan.reply ) {
@@ -1443,9 +1486,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAGE, channel_page ) ||
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, 0 ); //Todo: Replace with enum. Not using UWB so detected category is not supported
 
-		r = rdev_active_scan_register_listener(rdev, NULL, info, &wrk->work.work );
-
-		INIT_DELAYED_WORK( &wrk->work, nl802154_active_scan_cnf );
+		r = rdev_active_scan_register_listener(rdev, info, nl802154_active_scan_pan_descriptor_send, &wrk->work.work );
 	}
 
 	init_completion( &wrk->completion );
@@ -1942,7 +1983,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.doit = nl802154_ed_scan_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 };

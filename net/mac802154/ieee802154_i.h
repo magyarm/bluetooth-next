@@ -58,7 +58,7 @@ struct ieee802154_local {
 	bool started;
 	bool suspended;
 	struct genl_info *beacon_listener;
-	struct genl_info *active_scan_listener;
+	void (*active_scan_callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work);
 	struct work_struct *active_scan_work;
 
 	struct tasklet_struct tasklet;

@@ -30,8 +30,9 @@
 #include "ieee802154_i.h"
 
 struct work_active_scan_receive {
-	struct ieee802154_beacon_indication ind;
-	struct genl_info *active_scan_listener;
+	struct sk_buff *skb;
+	struct ieee802154_hdr *hdr;
+	void (*active_scan_callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work );
 	struct work_struct *active_scan_work;
 	struct work_struct work;
 };
@@ -52,17 +53,15 @@ static void rx_active_scan_receive_work( struct work_struct *work )
 
 	wrk = container_of( work, struct work_active_scan_receive, work );
 
-	cfg802154_active_scan_pan_descriptor_send(&wrk->ind, wrk->active_scan_listener, wrk->active_scan_work);
+	wrk->active_scan_callback( wrk->skb, wrk->hdr, wrk->active_scan_work );
 
 	kfree( wrk );
 	return;
 }
 
-static int ieee802154_active_scan_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, const struct ieee802154_local *local)
+static int ieee802154_schedule_active_scan_callback_work(struct sk_buff *skb, struct ieee802154_hdr *hdr, const struct ieee802154_local *local)
 {
    int ret = 0;
-   struct ieee802154_beacon_indication ind;
-   struct genl_info *info;
    struct work_active_scan_receive *wrk;
 
    wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
@@ -71,47 +70,11 @@ static int ieee802154_active_scan_deliver_bcn(struct sk_buff *skb, struct ieee80
       goto out;
    }
 
-   skb->ip_summed = CHECKSUM_UNNECESSARY;
-   skb->protocol = htons(ETH_P_IEEE802154);
-
-   ind.bsn = hdr->seq;
-   ind.pan_desc.src_addr_mode   = hdr->fc.source_addr_mode;
-
-   if ( IEEE802154_ADDR_LONG == ind.pan_desc.src_addr_mode ) {
-       ind.pan_desc.src_addr = mac_cb(skb)->source.extended_addr;
-   }
-   else if ( IEEE802154_ADDR_SHORT == ind.pan_desc.src_addr_mode ) {
-       ind.pan_desc.src_addr = mac_cb(skb)->source.short_addr;
-   }
-
-   /* The Source PAN Identifier and Source Address fields contain the PAN identifier and address,
-    * respectively, of the device transmitting the beacon. */
-   ind.pan_desc.src_addr        = mac_cb(skb)->source.short_addr;
-   ind.pan_desc.src_pan_id      = mac_cb(skb)->source.pan_id;
-   ind.pan_desc.channel_num     = local->phy->current_channel;
-   ind.pan_desc.channel_page    = local->phy->current_page;
-   ind.pan_desc.superframe_spec = 0;
-   ind.pan_desc.gts_permit      = 0;
-   ind.pan_desc.lqi             = mac_cb(skb)->lqi;
-   ind.pan_desc.time_stamp      = 0;
-   ind.pan_desc.sec_status      = 0;
-   ind.pan_desc.sec_level       = mac_cb(skb)->seclevel;
-   ind.pan_desc.key_id_mode     = hdr->sec.key_id_mode;
-   ind.pan_desc.key_src         = 0;
-   ind.pan_desc.key_index       = hdr->sec.key_id;
-
-   ind.sdu_len = skb->len - skb->data_len;
-   memcpy(&ind.sdu, skb->data, ind.sdu_len);
-
-   /* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
-    * where it can be accessed via netlink
-    */
-   info = local->active_scan_listener;
-   wrk->active_scan_listener = info;
+   wrk->skb = skb;
+   wrk->hdr = hdr;
+   wrk->active_scan_callback = local->active_scan_callback;
    wrk->active_scan_work = local->active_scan_work;
    INIT_WORK( &wrk->work, rx_active_scan_receive_work );
-
-   wrk->ind = ind;
 
    ret = schedule_work( &wrk->work );
 
@@ -185,9 +148,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		dev_err( &(wpan_dev->netdev->dev), "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
-		if( sdata->local->active_scan_listener && sdata->local->active_scan_work ) {
+		if( sdata->local->active_scan_callback && sdata->local->active_scan_work ) {
 			dev_err( &(wpan_dev->netdev->dev), "Received Beacon Frame Control Active Scan");
-			return ieee802154_active_scan_deliver_bcn(skb, hdr, sdata->local );
+			return ieee802154_schedule_active_scan_callback_work(skb, hdr, sdata->local );
 		}
 		break;
 	default:

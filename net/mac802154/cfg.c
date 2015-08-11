@@ -287,11 +287,13 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info, struct work_struct *work)
+ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		void (*callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+		struct work_struct *work)
 {
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->active_scan_listener = info;
+	local->active_scan_callback = callback;
 	local->active_scan_work = work;
 	ret = drv_start( local );
 	return ret;
@@ -302,7 +304,7 @@ ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy )
 {
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->active_scan_listener = NULL;
+	local->active_scan_callback = NULL;
 	local->active_scan_work = NULL;
 	return ret;
 }
@@ -356,7 +358,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	cb->dest = dst_addr;
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 
 	//Add the mac header to the data
 	r = memcpy( data, cb, size );
@@ -375,11 +377,6 @@ error:
 	kfree_skb(skb);
 out:
 	return r;
-}
-
-int cfg802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work )
-{
-	return nl802154_active_scan_pan_descriptor_send( beacon_notify, info, active_scan_work );
 }
 
 const struct cfg802154_ops mac802154_config_ops = {

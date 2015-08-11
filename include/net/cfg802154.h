@@ -67,7 +67,9 @@ struct cfg802154_ops {
 	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 					u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
-					struct wpan_dev *wpan_dev, struct genl_info *info, struct work_struct *work );
+					struct genl_info *info,
+					void (*callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+					struct work_struct *work );
 	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy );
 	int	(*send_beacon_command_frame)( struct wpan_phy *wpan_phy,
 					struct wpan_dev *wpan_dev, u8 cmd_frame_id );
@@ -235,7 +237,5 @@ static inline const char *wpan_phy_name(struct wpan_phy *phy)
 {
 	return dev_name(&phy->dev);
 }
-
-int nl802154_active_scan_pan_descriptor_send( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info, struct work_struct *active_scan_work );
 
 #endif /* __NET_CFG802154_H */
