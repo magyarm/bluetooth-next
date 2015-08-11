@@ -268,12 +268,12 @@ rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_d
 }
 
 static inline int
-rdev_assoc_ack(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
+rdev_assoc_empty_data_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
 		u8 coord_addr_mode, u16 coord_pan_id, u64 coord_address )
 {
 	int ret = 0;
 
-	ret = rdev->ops->assoc_ack( &rdev->wpan_phy, wpan_dev,
+	ret = rdev->ops->assoc_empty_data_req( &rdev->wpan_phy, wpan_dev,
 			coord_addr_mode, coord_pan_id, coord_address );
 
 	return ret;

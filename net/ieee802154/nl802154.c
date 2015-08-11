@@ -1306,7 +1306,7 @@ enum {
 	MAC_ERR_INVALID_PARAMETER,
 };
 
-static int nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status )
+static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status )
 {
 	int r;
 	struct cfg802154_registered_device *rdev;
@@ -1363,22 +1363,21 @@ nla_put_failure:
 free_reply:
     nlmsg_free( reply );
 out:
-    return r;
+    return;
 }
 
-int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work ) {
+void nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work ) {
 
-	int ret = 0;
 	struct work802154 *wrk = container_of( to_delayed_work( assoc_resp_work ), struct work802154, work );
 
 	cancel_delayed_work( &wrk->work );
 
-	ret = nl802154_assoc_cnf( info, short_addr, status );
+	nl802154_assoc_cnf( info, short_addr, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
 
-	return ret;
+	return;
 }
 
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
@@ -1406,6 +1405,11 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	u16 coord_pan_id;
 	u64 coord_address;
 	u8 capability_information;
+//	XXX: TODO
+//	u32 security_level;
+//	u32 key_id_mode;
+//	u64 key_source;
+//	u32 key_index;
 	u32 timeout_ms = 10000;
 
 	struct cfg802154_registered_device *rdev;
@@ -1498,7 +1502,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	msleep(50);
-	r = rdev_assoc_ack( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
+	r = rdev_assoc_empty_data_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "ack assoc_req failed (%d)\n", r );
 		goto free_wrk;

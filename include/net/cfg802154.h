@@ -76,7 +76,7 @@ struct cfg802154_ops {
 	int (*assoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 				u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
 				u8 capability_information );
-	int (*assoc_ack)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+	int (*assoc_empty_data_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 				u8 addr_mode, u16 coord_pan_id, u64 coord_addr );
 	int (*register_assoc_req_listener)(struct wpan_phy *wpan_phy,
 				struct genl_info *info, struct work_struct *work );
@@ -253,6 +253,6 @@ static inline const char *wpan_phy_name(struct wpan_phy *phy)
 	return dev_name(&phy->dev);
 }
 
-int nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work );
+void nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work );
 
 #endif /* __NET_CFG802154_H */

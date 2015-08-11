@@ -355,7 +355,7 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_assoc_ack(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+ieee802154_assoc_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 addr_mode, u16 coord_pan_id, u64 coord_addr ){
 
 	int r = 0;
@@ -722,9 +722,9 @@ ieee802154_deregister_assoc_req_listener( struct wpan_phy *wpan_phy )
 	return ret;
 }
 
-int cfg802154_assoc_resp_send( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work )
+void cfg802154_assoc_resp_send( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work )
 {
-	return nl802154_assoc_req_complete( info, short_addr, status, assoc_resp_work );
+	nl802154_assoc_req_complete( info, short_addr, status, assoc_resp_work );
 }
 
 const struct cfg802154_ops mac802154_config_ops = {
@@ -750,7 +750,7 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
 	.assoc_req = ieee802154_assoc_req,
-	.assoc_ack = ieee802154_assoc_ack,
+	.assoc_empty_data_req = ieee802154_assoc_empty_data_req,
 	.register_assoc_req_listener = ieee802154_register_assoc_req_listener,
 	.deregister_assoc_req_listener = ieee802154_deregister_assoc_req_listener,
 	.disassoc_req = ieee802154_disassoc_req,
