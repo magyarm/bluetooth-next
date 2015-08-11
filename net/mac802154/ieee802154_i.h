@@ -57,14 +57,13 @@ struct ieee802154_local {
 
 	bool started;
 	bool suspended;
-	struct genl_info *assoc_resp_listener;
 	struct work_struct *assoc_resp_work;
-
 	struct tasklet_struct tasklet;
 	struct sk_buff_head skb_queue;
 
 	struct sk_buff *tx_skb;
 	struct work_struct tx_work;
+	void (*callback)(struct sk_buff *skb, void *args);
 };
 
 enum {

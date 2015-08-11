@@ -29,68 +29,12 @@
 
 #include "ieee802154_i.h"
 
-struct work_assoc_resp_receive{
-	u16 short_addr;
-	u8 status;
-	struct genl_info *assoc_resp_listener;
-	struct work_struct *assoc_resp_work;
-	struct work_struct work;
-};
-
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
 	return netif_receive_skb(skb);
-}
-
-static void rx_assoc_resp_receive_work ( struct work_struct *work ){
-
-	struct work_assoc_resp_receive *wrk;
-
-	wrk = container_of( work, struct work_assoc_resp_receive, work );
-
-	cfg802154_assoc_resp_send( wrk->assoc_resp_listener, wrk->short_addr, wrk->status, wrk->assoc_resp_work);
-
-	kfree( wrk );
-	return;
-}
-
-static int ieee802154_assoc_resp(struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct ieee802154_local *local){
-	int ret = 0;
-
-	struct genl_info *info;
-	struct work_assoc_resp_receive *wrk;
-
-	u16 short_addr;
-	u8 status;
-
-	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-	if ( NULL == wrk ) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
-	skb->protocol = htons(ETH_P_IEEE802154);
-
-	short_addr = skb->data[1] << 8 | skb->data[2];
-	status = skb->data[3];
-
-	info = local->assoc_resp_listener;
-	wrk->assoc_resp_listener = info;
-	wrk->assoc_resp_work = local->assoc_resp_work;
-
-	wrk->short_addr = short_addr;
-	wrk->status = status;
-
-	INIT_WORK( &wrk->work, rx_assoc_resp_receive_work );
-
-	ret = schedule_work( &wrk->work );
-
-out:
-   return ret;
 }
 
 static int
@@ -157,8 +101,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_MAC_CMD:
 		if( 0x2 == skb->data[0] ){
-			if ( sdata->local->assoc_resp_listener  && sdata->local->assoc_resp_work ){
-				return ieee802154_assoc_resp(skb, hdr, sdata->local);
+			if ( sdata->local->assoc_resp_work ){
+				sdata->local->callback( skb, sdata->local->assoc_resp_work);
+				return 0;
 			}
 		}
 		goto fail;

@@ -1366,18 +1366,19 @@ out:
     return;
 }
 
-void nl802154_assoc_req_complete( struct genl_info *info, u16 short_addr, u8 status, struct work_struct *assoc_resp_work ) {
+static void nl802514_assoc_req_complete( struct sk_buff *skb, void* args)
+{
+	struct work802154 *wrk = container_of( to_delayed_work( (struct work_struct*) args ), struct work802154, work );
 
-	struct work802154 *wrk = container_of( to_delayed_work( assoc_resp_work ), struct work802154, work );
+	u16 short_addr = skb->data[2] << 8 | skb->data[1];
+	u8 status = skb->data[3];
 
 	cancel_delayed_work( &wrk->work );
 
-	nl802154_assoc_cnf( info, short_addr, status );
+	nl802154_assoc_cnf( wrk->info, short_addr, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
-
-	return;
 }
 
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
@@ -1398,7 +1399,6 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 {
 	int r;
-
 	u8 channel_number;
 	u8 channel_page;
 	u8 coord_addr_mode;
@@ -1490,7 +1490,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	r = rdev_register_assoc_req_listener( rdev, info, &wrk->work.work );
+	r = rdev_register_assoc_req_listener( rdev, nl802514_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "register assoc_req listener failed (%d)\n", r );
 		goto free_wrk;

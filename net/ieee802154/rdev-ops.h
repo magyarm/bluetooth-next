@@ -281,11 +281,11 @@ rdev_assoc_empty_data_req(struct cfg802154_registered_device *rdev, struct wpan_
 
 static inline int
 rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev,
-		struct genl_info *info, struct work_struct *work )
+		void (*callback)( struct sk_buff *skb, void *args), struct work_struct *work )
 {
 	int ret = 0;
 
-	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, info, work);
+	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, callback, work);
 
 	return ret;
 }
