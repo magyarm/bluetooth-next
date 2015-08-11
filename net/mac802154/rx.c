@@ -58,7 +58,7 @@ static void rx_active_scan_receive_work( struct work_struct *work )
 	return;
 }
 
-static int ieee802154_active_scan_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, struct ieee802154_local *local)
+static int ieee802154_active_scan_deliver_bcn(struct sk_buff *skb, struct ieee802154_hdr *hdr, const struct ieee802154_local *local)
 {
    int ret = 0;
    struct ieee802154_beacon_indication ind;
@@ -103,18 +103,6 @@ static int ieee802154_active_scan_deliver_bcn(struct sk_buff *skb, struct ieee80
    ind.sdu_len = skb->len - skb->data_len;
    memcpy(&ind.sdu, skb->data, ind.sdu_len);
 
-   printk( KERN_INFO "Beacon BSN: %x  Pld: %x %x %x %x %x %x %x %x %x %x\n" , ind.bsn,
-   		skb->data[0],
-   		skb->data[1],
-   		skb->data[2],
-   		skb->data[3],
-   		skb->data[4],
-   		skb->data[5],
-   		skb->data[6],
-   		skb->data[7],
-   		skb->data[8],
-   		skb->data[9]);
-
    /* Step 2: Push beacon data to the cfg framework (as is done in the ieee80211 subsystem),
     * where it can be accessed via netlink
     */
@@ -141,7 +129,7 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	dev_err( &(wpan_dev->netdev->dev), "getting packet via slave interface %s\n", sdata->dev->name);
 
-	printk( KERN_INFO "Frame Type received (type = %d)\n", mac_cb(skb)->type);
+	dev_err( &(wpan_dev->netdev->dev), "Frame Type received (type = %d)\n", mac_cb(skb)->type);
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -194,12 +182,11 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
-		printk( KERN_INFO "Received Data Frame Control");
+		dev_err( &(wpan_dev->netdev->dev), "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
-		printk( KERN_INFO "active_scan_listener address: %x\n", sdata->local->active_scan_listener );
 		if( sdata->local->active_scan_listener && sdata->local->active_scan_work ) {
-			printk( KERN_INFO "Received Beacon Frame Control Active Scan");
+			dev_err( &(wpan_dev->netdev->dev), "Received Beacon Frame Control Active Scan");
 			return ieee802154_active_scan_deliver_bcn(skb, hdr, sdata->local );
 		}
 		break;

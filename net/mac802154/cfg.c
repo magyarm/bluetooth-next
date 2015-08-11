@@ -320,7 +320,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
 
 	//Create beacon frame / payload
-	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	hlen = 7; //Header is 7 octets. From the IEEE 802154 std 2011.
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
 
