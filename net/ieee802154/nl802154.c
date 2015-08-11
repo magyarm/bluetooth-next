@@ -1318,34 +1318,40 @@ int nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, struc
 	struct net *net;
 	struct nlattr *nl_pan_desc_entry;
 
+	struct cfg802154_registered_device *rdev;
+	struct wpan_dev *wpan_dev;
+
 	struct work802154 *wrk;
 
 	wrk = container_of( to_delayed_work( active_scan_work ), struct work802154, work );
 
+	rdev = wrk->info->user_ptr[0];
+	wpan_dev = (struct wpan_dev *)&rdev->wpan_phy.dev;
+
 	beacon_notify.pan_desc.src_addr_mode   = receive_hdr->fc.source_addr_mode;
 
-	if ( IEEE802154_ADDR_LONG == ind.pan_desc.src_addr_mode ) {
-		ind.pan_desc.src_addr = mac_cb(skb)->source.extended_addr;
+	if ( IEEE802154_ADDR_LONG == beacon_notify.pan_desc.src_addr_mode ) {
+		beacon_notify.pan_desc.src_addr = mac_cb(receive_skb)->source.extended_addr;
 	}
-	else if ( IEEE802154_ADDR_SHORT == ind.pan_desc.src_addr_mode ) {
-		ind.pan_desc.src_addr = mac_cb(skb)->source.short_addr;
+	else if ( IEEE802154_ADDR_SHORT == beacon_notify.pan_desc.src_addr_mode ) {
+		beacon_notify.pan_desc.src_addr = mac_cb(receive_skb)->source.short_addr;
 	}
 
 	/* The Source PAN Identifier and Source Address fields contain the PAN identifier and address,
 	 * respectively, of the device transmitting the beacon. */
-	ind.pan_desc.src_addr        = mac_cb(skb)->source.short_addr;
-	ind.pan_desc.src_pan_id      = mac_cb(skb)->source.pan_id;
-	ind.pan_desc.channel_num     = phy->current_channel;
-	ind.pan_desc.channel_page    = phy->current_page;
-	ind.pan_desc.superframe_spec = 0;
-	ind.pan_desc.gts_permit      = 0;
-	ind.pan_desc.lqi             = mac_cb(skb)->lqi;
-	ind.pan_desc.time_stamp      = 0;
-	ind.pan_desc.sec_status      = 0;
-	ind.pan_desc.sec_level       = mac_cb(skb)->seclevel;
-	ind.pan_desc.key_id_mode     = receive_hdr->sec.key_id_mode;
-	ind.pan_desc.key_src         = 0;
-	ind.pan_desc.key_index       = receive_hdr->sec.key_id;
+	beacon_notify.pan_desc.src_addr        = mac_cb(receive_skb)->source.short_addr;
+	beacon_notify.pan_desc.src_pan_id      = mac_cb(receive_skb)->source.pan_id;
+	beacon_notify.pan_desc.channel_num     = wpan_dev->wpan_phy->current_channel;
+	beacon_notify.pan_desc.channel_page    = wpan_dev->wpan_phy->current_channel;
+	beacon_notify.pan_desc.superframe_spec = 0;
+	beacon_notify.pan_desc.gts_permit      = 0;
+	beacon_notify.pan_desc.lqi             = mac_cb(receive_skb)->lqi;
+	beacon_notify.pan_desc.time_stamp      = 0;
+	beacon_notify.pan_desc.sec_status      = 0;
+	beacon_notify.pan_desc.sec_level       = mac_cb(receive_skb)->seclevel;
+	beacon_notify.pan_desc.key_id_mode     = receive_hdr->sec.key_id_mode;
+	beacon_notify.pan_desc.key_src         = 0;
+	beacon_notify.pan_desc.key_index       = receive_hdr->sec.key_id;
 
 	nl_pan_desc_entry = nla_nest_start( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESCRIPTOR );
 	if (nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify.pan_desc.src_addr_mode ) ||

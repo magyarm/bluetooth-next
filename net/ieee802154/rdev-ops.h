@@ -226,7 +226,6 @@ rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struc
 	return ret;
 }
 
-
 static inline void
 rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
 								void (*callback)( struct sk_buff *, void *), void *arg )
