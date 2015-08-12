@@ -1231,8 +1231,101 @@ out:
 	return;
 }
 
+static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
+{
+	u8 r;
+	u8 status = IEEE802154_SUCCESS;
+	u8 scan_type;
+	u32 scan_channels;
+	u8 scan_duration;
+	u8 channel_page;
+
+	struct cfg802154_registered_device *rdev;
+	struct work802154 *wrk;
+	struct device *dev;
+	void (*cnf)( struct work_struct * ) = NULL;
+
+	printk( KERN_INFO "Inside: %s", __FUNCTION__);
+
+	rdev = info->user_ptr[0];
+	dev = &rdev->wpan_phy.dev;
+
+	if ( ! (
+		info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
+		info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] &&
+		info->attrs[ NL802154_ATTR_SCAN_DURATION ] &&
+		info->attrs[ NL802154_ATTR_PAGE ]
+	) ) {
+		r = -EINVAL;
+		goto out;
+	}
+
+	scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
+	scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] );
+	scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
+	channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
+
+	if ( channel_page > IEEE802154_MAX_PAGE ) {
+		dev_err( dev, "invalid channel_page %u\n", channel_page );
+		r = -EINVAL;
+		goto out;
+	}
+
+	if ( scan_channels & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
+		dev_err( dev, "invalid scan_channels %u\n", scan_channels );
+		r = -EINVAL;
+		goto out;
+	}
+
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+		if ( NULL == wrk ) {
+			r = -ENOMEM;
+			goto out;
+		}
+
+	switch( scan_type ) {
+	case IEEE802154_MAC_SCAN_ED:
+		wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
+		wrk->cmd_stuff.ed_scan.channel_page = channel_page;
+		wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
+		wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
+		cnf = nl802154_ed_scan_cnf;
+		break;
+	default:
+		dev_err( dev, "invalid scan type %u\n", scan_type );
+		r = -EINVAL;
+		goto out;
+		break;
+	}
+
+	wrk->skb = skb;
+	wrk->info = info;
+
+	INIT_DELAYED_WORK( &wrk->work, cnf );
+
+	init_completion( &wrk->completion );
+	r = schedule_delayed_work( &wrk->work, 0 ) ? 0 : -EALREADY;
+	if ( 0 != r ) {
+		dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	wait_for_completion( &wrk->completion );
+
+	r = 0;
+	goto out;
+
+free_reply:
+	nlmsg_free( wrk->cmd_stuff.active_scan.reply );
+free_wrk:
+	kfree( wrk );
+
+out:
+	return r;
+}
+
 static int
-ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id )
+ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct net_device *netdev, u8 cmd_frame_id )
 {
 	int r = 0;
 	struct sk_buff *skb;
@@ -1243,14 +1336,16 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 
 	//Create beacon frame / payload
 	hlen = 7; //Header is 7 octets. From the IEEE 802154 std 2011.
-	tlen = wpan_dev->netdev->needed_tailroom;
+	tlen = netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
+
+	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
 	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
 	if (!skb){
 		goto error;
 	}
-#if 0
+
 	skb_reserve(skb, hlen);
 
 	skb_reset_network_header(skb);
@@ -1272,22 +1367,21 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 
 	cb->source = src_addr;
 	cb->dest = dst_addr;
+	printk( KERN_INFO "netdev address: %p", netdev );
 
-	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+	r = netdev->header_ops->create( skb, netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 
 	//Add the mac header to the data
 	memcpy( data, cb, size );
 	data[0] = cmd_frame_id;
 
-	skb->dev = wpan_dev->netdev;
+	skb->dev = netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	wpan_dev->netdev->netdev_ops->ndo_start_xmit( skb, wpan_dev->netdev );
+	netdev->netdev_ops->ndo_start_xmit( skb, netdev );
 	if( 0 == r) {
 		goto out;
 	}
-#endif
 
 error:
 	kfree_skb(skb);
@@ -1303,10 +1397,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	struct sk_buff *skb;
 	struct genl_info *info;
 	struct cfg802154_registered_device *rdev;
-	struct net_device *dev;
-	struct wpan_dev *wpan_dev;
-
-	int i;
+	struct net_device *netdev;
 
 	u8 channel_page;
 	u32 scan_channels;
@@ -1316,12 +1407,13 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	struct sk_buff *reply;
 	void *hdr;
 
+	printk( KERN_INFO "Inside: %s", __FUNCTION__);
+
 	wrk = container_of( to_delayed_work( work ), struct work802154, work );
 	skb = wrk->skb;
 	info = wrk->info;
 	rdev = info->user_ptr[0];
-	dev = info->user_ptr[1];
-	wpan_dev = (struct wpan_dev *)&rdev->wpan_phy.dev;
+	netdev = info->user_ptr[1];
 
 	//Get active scan variables from previous calls from the work struct
 	status = wrk->cmd_stuff.active_scan.status;
@@ -1347,15 +1439,15 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	}
 
 	if( scan_channels & BIT(current_channel) ) {
-		dev_dbg( &wpan_dev->netdev->dev, "Scanning channel #: %d\n", i );
+//		dev_dbg( &netdev->dev, "Scanning channel #: %d\n", current_channel );
+		printk( KERN_INFO "Scanning channel #: %d\n", current_channel);
 		status = rdev_set_channel(rdev, channel_page, current_channel);
 		//Send the beacon request
-		status = ieee802154_send_beacon_command_frame( &rdev->wpan_phy, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+		status = ieee802154_send_beacon_command_frame( &rdev->wpan_phy, netdev, IEEE802154_CMD_BEACON_REQ );
 		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
 		status = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
 		if( 0 == status ) {
-			//goto out;
-			goto complete;
+			goto out;
 		}
 	}
 
@@ -1365,7 +1457,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 //		status = nl802154_active_scan_put_pan_descriptors( reply, result_list_size, pan_descriptor_list ;)
 
 		if ( 0 != status ) {
-			dev_err( &dev->dev, "nla_put_failure (%d)\n", status );
+			dev_err( &netdev->dev, "nla_put_failure (%d)\n", status );
 			goto nla_put_failure;
 		}
 
@@ -1395,6 +1487,8 @@ void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, cons
 	struct wpan_dev *wpan_dev;
 
 	struct work802154 *wrk;
+
+	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
 	wrk = container_of( to_delayed_work( active_scan_work ), struct work802154, work );
 
@@ -1460,7 +1554,7 @@ out:
 	return;
 }
 
-static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
+static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
 	u8 r;
 	u8 status = IEEE802154_SUCCESS;
@@ -2288,7 +2382,7 @@ static const struct genl_ops nl802154_ops[] = {
 	},
 	{
 		.cmd = NL802154_CMD_ACTIVE_SCAN_REQ,
-		.doit = nl802154_ed_scan_req,
+		.doit = nl802154_active_scan_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
