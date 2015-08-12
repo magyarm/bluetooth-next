@@ -29,12 +29,57 @@
 
 #include "ieee802154_i.h"
 
+struct work_active_scan_receive {
+	struct sk_buff *skb;
+	const struct ieee802154_hdr *hdr;
+	void (*active_scan_callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work );
+	struct work_struct *active_scan_work;
+	struct work_struct work;
+};
+
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
+	pr_debug("received beacon packet via interface %s\n", skb->dev->name);
+
 	return netif_receive_skb(skb);
+}
+
+static void rx_active_scan_receive_work( struct work_struct *work )
+{
+	struct work_active_scan_receive *wrk;
+
+	wrk = container_of( work, struct work_active_scan_receive, work );
+
+	wrk->active_scan_callback( wrk->skb, wrk->hdr, wrk->active_scan_work );
+
+	kfree( wrk );
+	return;
+}
+
+static int ieee802154_schedule_active_scan_callback_work(struct sk_buff *skb, const struct ieee802154_hdr *hdr, const struct ieee802154_local *local)
+{
+   int ret = 0;
+   struct work_active_scan_receive *wrk;
+
+   wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+   if ( NULL == wrk ) {
+      ret = -ENOMEM;
+      goto out;
+   }
+
+   wrk->skb = skb;
+   wrk->hdr = hdr;
+   wrk->active_scan_callback = local->active_scan_callback;
+   wrk->active_scan_work = local->active_scan_work;
+   INIT_WORK( &wrk->work, rx_active_scan_receive_work );
+
+   ret = schedule_work( &wrk->work );
+
+out:
+   return ret;
 }
 
 static int
@@ -45,7 +90,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	__le16 span, sshort;
 	int rc;
 
-	pr_debug("getting packet via slave interface %s\n", sdata->dev->name);
+	dev_err( &(wpan_dev->netdev->dev), "getting packet via slave interface %s\n", sdata->dev->name);
+
+	dev_err( &(wpan_dev->netdev->dev), "Frame Type received (type = %d)\n", mac_cb(skb)->type);
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -96,9 +143,16 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	sdata->dev->stats.rx_packets++;
 	sdata->dev->stats.rx_bytes += skb->len;
 
-	switch (mac_cb(skb)->type) {
+	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
+		dev_err( &(wpan_dev->netdev->dev), "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
+	case IEEE802154_FC_TYPE_BEACON:
+		if( sdata->local->active_scan_callback && sdata->local->active_scan_work ) {
+			dev_err( &(wpan_dev->netdev->dev), "Received Beacon Frame Control Active Scan");
+			return ieee802154_schedule_active_scan_callback_work(skb, hdr, sdata->local );
+		}
+		break;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);

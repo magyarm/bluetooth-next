@@ -367,14 +367,6 @@ static inline bool is_short_address( u16 addr ) {
 #define PRIx64 "llx"
 #endif
 
-static inline int
-ieee802154_header_create( struct sk_buff *skb, struct wpan_dev *wpan_dev,
-						int frame_type, struct ieee802154_addr *dst,
-						struct ieee802154_addr *src, size_t sz )
-{
-	return -ENOSYS;
-}
-
 static unsigned int
 ieee802154_num_listeners( struct ieee802154_local *local ) {
 	unsigned int r;
@@ -510,7 +502,7 @@ ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	dev_dbg( &wpan_dev->netdev->dev, "Src addr long: 0x%016" PRIx64 "\n", src_addr.extended_addr );
 
 	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 	if ( 0 != r ) {
 		dev_err( &wpan_dev->netdev->dev, "ieee802154_header_create failed (%d)\n", r );
 		goto error;
@@ -543,6 +535,33 @@ out:
 	return r;
 }
 
+static int
+ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
+		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+		struct work_struct *work)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->active_scan_callback = callback;
+	local->active_scan_work = work;
+	ret = drv_start( local );
+	if( 0 != ret ) {
+		local->active_scan_callback = NULL;
+		local->active_scan_work = NULL;
+	}
+	return ret;
+}
+
+static int
+ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy )
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->active_scan_callback = NULL;
+	local->active_scan_work = NULL;
+	return ret;
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -565,6 +584,8 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
+	.register_active_scan_listener = ieee802154_register_active_scan_listener,
+	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
 	.disassoc_req = ieee802154_disassoc_req,
 	.register_disassoc_req_listener = ieee802154_register_disassoc_req_listener,
 	.deregister_disassoc_req_listener = ieee802154_deregister_disassoc_req_listener,

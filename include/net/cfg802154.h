@@ -21,11 +21,14 @@
 #include <linux/netdevice.h>
 #include <linux/mutex.h>
 #include <linux/bug.h>
+#include <linux/workqueue.h>
 
 #include <net/nl802154.h>
+#include <net/genetlink.h>
 
 struct wpan_phy;
 struct wpan_phy_cca;
+struct ieee802154_hdr;
 
 struct cfg802154_ops {
 	struct net_device * (*add_virtual_intf_deprecated)(struct wpan_phy *wpan_phy,
@@ -83,6 +86,10 @@ struct cfg802154_ops {
 	void	(*deregister_disassoc_req_listener)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev,
 				void (*callback)( struct sk_buff *, void *), void *arg);
+	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
+					void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+					struct work_struct *work );
+	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy );
 };
 
 static inline bool
