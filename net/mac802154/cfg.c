@@ -393,7 +393,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
-	hlen = 18;
+	hlen = 40; //Todo: Replace magic number. comes from ieee std 802154, this value is the max header length.
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
 
