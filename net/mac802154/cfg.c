@@ -375,6 +375,60 @@ ieee802154_header_create( struct sk_buff *skb, struct wpan_dev *wpan_dev,
 	return -ENOSYS;
 }
 
+static unsigned int
+ieee802154_num_listeners( struct ieee802154_local *local ) {
+	unsigned int r;
+	r = 0;
+	r = NULL == local->disassoc_req_callback ? r : r + 1;
+	return r;
+}
+
+static int
+ieee802154_register_disassoc_req_listener( struct wpan_phy *wpan_phy,
+							struct wpan_dev *wpan_dev,
+							void (*callback)(struct sk_buff *, void *),
+							void *arg)
+{
+	int r;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	BUG_ON( NULL == local );
+	if ( NULL != arg && NULL == callback ) {
+		r = -EINVAL;
+		goto out;
+	}
+	// In the future, this will probably adopt more of a list_head approach.
+	// For now, only allow one unique, non-NULL listener.
+	if ( !( NULL == local->disassoc_req_callback || NULL == callback ) ) {
+		r = -EBUSY;
+		goto out;
+	}
+	local->disassoc_req_callback = callback;
+	local->disassoc_req_arg = NULL == callback ? NULL : arg;
+	r = 0;
+out:
+	return r;
+}
+
+static void
+ieee802154_deregister_disassoc_req_listener( struct wpan_phy *wpan_phy,
+							struct wpan_dev *wpan_dev,
+							void (*callback)(struct sk_buff *, void *),
+							void *arg)
+{
+	int r;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	BUG_ON( NULL == local );
+	if ( !( local->disassoc_req_callback == callback && local->disassoc_req_arg == arg ) ) {
+		r = -EINVAL;
+		goto out;
+	}
+	local->disassoc_req_callback = NULL;
+	local->disassoc_req_arg = NULL;
+	r = 0;
+out:
+	return;
+}
+
 static int
 ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 						u16 device_panid, u64 device_address,
@@ -389,7 +443,7 @@ ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	unsigned char *data;
 
 	struct ieee802154_sub_if_data *sdata;
-	struct ieee802154_local * local;
+	struct ieee802154_local *local;
 
 	local = wpan_phy_priv(wpan_phy);
 
@@ -512,4 +566,6 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
 	.disassoc_req = ieee802154_disassoc_req,
+	.register_disassoc_req_listener = ieee802154_register_disassoc_req_listener,
+	.deregister_disassoc_req_listener = ieee802154_deregister_disassoc_req_listener,
 };

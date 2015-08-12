@@ -267,11 +267,9 @@ static inline int
 rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
 								void (*callback)( struct sk_buff *, void *), void *arg )
 {
-	int ret = 0;
-
-	// XXX: implement me
-
-	return ret;
+	int r;
+	r = rdev->ops->register_disassoc_req_listener( &rdev->wpan_phy, wpan_dev, callback, arg );
+	return r;
 }
 
 
@@ -279,7 +277,7 @@ static inline void
 rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
 								void (*callback)( struct sk_buff *, void *), void *arg )
 {
-	// XXX: implement me
+	rdev->ops->deregister_disassoc_req_listener( &rdev->wpan_phy, wpan_dev, callback, arg );
 }
 
 static inline int

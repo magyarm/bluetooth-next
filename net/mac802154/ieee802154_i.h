@@ -63,6 +63,9 @@ struct ieee802154_local {
 
 	struct sk_buff *tx_skb;
 	struct work_struct tx_work;
+
+	void (*disassoc_req_callback)(struct sk_buff *, void *);
+	void *disassoc_req_arg;
 };
 
 enum {
