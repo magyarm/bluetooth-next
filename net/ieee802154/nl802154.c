@@ -292,13 +292,15 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_DISASSOC_TX_INDIRECT] = { .type = NLA_U8, },
 	[NL802154_ATTR_DISASSOC_STATUS] = { .type = NLA_U8, },
 	[NL802154_ATTR_DISASSOC_TIMEOUT_MS] = { .type = NLA_U16, },
-};
+
 	[NL802154_ATTR_BEACON_SEQUENCE_NUMBER] = { .type = NLA_U8, },
 	[NL802154_ATTR_PAN_DESCRIPTOR] { .type = NLA_NESTED, },
 	[NL802154_ATTR_PEND_ADDR_SPEC] = { .type = NLA_U8 },
 	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
 	[NL802154_ATTR_SDU_LENGTH] = { .type = NLA_U32 },
 	[NL802154_ATTR_SDU] = { .type = NLA_NESTED },
+
+};
 
 /* message building helper */
 static inline void *nl802154hdr_put(struct sk_buff *skb, u32 portid, u32 seq,
@@ -1345,7 +1347,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	}
 
 	if( scan_channels & BIT(current_channel) ) {
-		netdev_dbg(dev, "Scanning channel #: %d\n", i );
+		dev_dbg( &wpan_dev->netdev->dev, "Scanning channel #: %d\n", i );
 		status = rdev_set_channel(rdev, channel_page, current_channel);
 		//Send the beacon request
 		status = ieee802154_send_beacon_command_frame( &rdev->wpan_phy, wpan_dev, IEEE802154_CMD_BEACON_REQ );
@@ -2284,8 +2286,6 @@ static const struct genl_ops nl802154_ops[] = {
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
 	},
-};
-
 	{
 		.cmd = NL802154_CMD_ACTIVE_SCAN_REQ,
 		.doit = nl802154_ed_scan_req,
@@ -2294,6 +2294,8 @@ static const struct genl_ops nl802154_ops[] = {
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
 	},
+};
+
 /* initialisation/exit functions */
 int nl802154_init(void)
 {
