@@ -1340,7 +1340,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		netdev_dbg(dev, "Scanning channel #: %d\n", i );
 		status = rdev_set_channel(rdev, channel_page, current_channel);
 		//Send the beacon request
-		status = ieee802154_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+		status = ieee802154_send_beacon_command_frame( wpan_dev->wpan_phy, wpan_dev, IEEE802154_CMD_BEACON_REQ );
 		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
 		status = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
 		if( 0 == status ) {

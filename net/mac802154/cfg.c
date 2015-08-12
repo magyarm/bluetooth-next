@@ -296,6 +296,10 @@ ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
 	local->active_scan_callback = callback;
 	local->active_scan_work = work;
 	ret = drv_start( local );
+	if( 0 != ret ) {
+		local->active_scan_callback = NULL;
+		local->active_scan_work = NULL;
+	}
 	return ret;
 }
 
