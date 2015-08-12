@@ -29,6 +29,10 @@
 
 #include "../mac802154/ieee802154_i.h"
 
+#ifndef PRIx64
+#define PRIx64 "llx"
+#endif
+
 struct work802154 {
 	// probably should add a mutex
 	struct sk_buff *skb;
@@ -1492,6 +1496,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	u16 coord_pan_id;
 	u64 coord_address;
 	u8 capability_information;
+	char coord_addr_str[] = "0x0011223344556677";
 //	XXX: TODO
 //	u32 security_level;
 //	u32 key_id_mode;
@@ -1501,12 +1506,19 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
+	struct net_device *netdev;
 	struct wpan_dev *wpan_dev;
-	struct net_device *dev;
+	struct device *logdev;
 
 	rdev = info->user_ptr[0];
-	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
-	dev = (struct net_device *) &wpan_dev->netdev;
+	netdev = info->user_ptr[1];
+	wpan_dev = netdev->ieee802154_ptr;
+
+	if ( wpan_dev->netdev != netdev ) {
+		printk( KERN_INFO "netdev (%p) != wpan_dev->netdev (%p)\n", netdev, wpan_dev->netdev );
+	}
+
+	logdev = &netdev->dev;
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_CHANNEL ] &&
@@ -1520,7 +1532,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] &&
 		info->attrs[ NL802154_ATTR_ASSOC_TIMEOUT_MS ]
 	) ) {
-		dev_err( &dev->dev, "invalid arguments\n" );
+		dev_err( logdev, "invalid arguments\n" );
 		r = -EINVAL;
 		goto out;
 	}
@@ -1535,29 +1547,33 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	case IEEE802154_ADDR_SHORT:
 		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
+			snprintf( coord_addr_str, sizeof(coord_addr_str), "0x%04x", (u16)coord_address );
 			break;
 		}
 		/* no break */
 	case IEEE802154_ADDR_LONG:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
 			coord_address = nla_get_u64( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
+			snprintf( coord_addr_str, sizeof(coord_addr_str), "0x%016" PRIx64, (u64)coord_address );
 			break;
 		}
 		/* no break */
 	default:
-		dev_err( &dev->dev, "invalid address / mode combination\n" );
+		dev_err( logdev, "invalid address / mode combination\n" );
 		r = -EINVAL;
 		goto out;
 	}
+
 	capability_information = nla_get_u8( info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] );
+
 	if ( channel_page > IEEE802154_MAX_PAGE ) {
-		dev_err( &dev->dev, "invalid channel_page %u\n", channel_page );
+		dev_err( logdev, "invalid channel_page %u\n", channel_page );
 		r = -EINVAL;
 		goto out;
 	}
 
 	if ( BIT( channel_number ) & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-		dev_err( &dev->dev, "invalid channel_number %u\n", channel_number );
+		dev_err( logdev, "invalid channel_number %u\n", channel_number );
 		r = -EINVAL;
 		goto out;
 	}
@@ -1573,20 +1589,23 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	r = rdev_set_channel(rdev, channel_page, channel_number);
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "rdev_set_channel failed (%d)\n", r );
+		dev_err( logdev, "rdev_set_channel failed (%d)\n", r );
 		goto free_wrk;
 	}
 
 	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "register assoc_req listener failed (%d)\n", r );
+		dev_err( logdev, "register assoc_req listener failed (%d)\n", r );
 		goto free_wrk;
 	}
+
+	dev_dbg( logdev, "channel_number: %u, channel_page: %u, coord_addr_mode: %u, coord_pan_id: 0x%04x, coord_address: %s, capability_information: 0x%02x, timeout_ms: %u\n",
+		channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_addr_str, capability_information, timeout_ms );
 
 	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
 			capability_information );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "send assoc_req failed (%d)\n", r );
+		dev_err( logdev, "send assoc_req failed (%d)\n", r );
 		goto dereg_listener;
 	}
 
@@ -1598,7 +1617,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	// XXX: eventually, it should be handled from userspace
 	r = nl802154_assoc_send_empty_data_req( &rdev->wpan_phy, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "ack assoc_req failed (%d)\n", r );
+		dev_err( logdev, "ack assoc_req failed (%d)\n", r );
 		goto dereg_listener;
 	}
 
@@ -1608,7 +1627,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
 	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "schedule_delayed_work failed (%d)\n", r );
+		dev_err( logdev, "schedule_delayed_work failed (%d)\n", r );
 		goto free_wrk;
 	}
 
@@ -1638,9 +1657,6 @@ static inline bool is_extended_address( u64 addr ) {
 	return mask & addr;
 }
 
-#ifndef PRIx64
-#define PRIx64 "llx"
-#endif
 static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, u8 status, u16 device_panid, u64 device_address ) {
 
 	int r;
@@ -1914,7 +1930,6 @@ static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 					rtnl_unlock();
 				return -EINVAL;
 			}
-
 			info->user_ptr[1] = dev;
 		} else {
 			info->user_ptr[1] = wpan_dev;
@@ -2084,7 +2099,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.doit = nl802154_assoc_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
