@@ -309,77 +309,6 @@ ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy )
 	return ret;
 }
 
-static int
-ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id )
-{
-	int r = 0;
-	struct sk_buff *skb;
-	struct ieee802154_mac_cb *cb;
-	int hlen, tlen, size;
-	struct ieee802154_addr dst_addr, src_addr;
-	unsigned char *data;
-	struct ieee802154_sub_if_data *sdata;
-
-	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
-
-	//Create beacon frame / payload
-	hlen = 7; //Header is 7 octets. From the IEEE 802154 std 2011.
-	tlen = wpan_dev->netdev->needed_tailroom;
-	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
-
-	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
-	sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
-	sdata->local = local;
-
-	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
-	if (!skb){
-		goto error;
-	}
-
-	skb_reserve(skb, hlen);
-
-	skb_reset_network_header(skb);
-
-	data = skb_put(skb, size);
-
-	src_addr.mode = IEEE802154_ADDR_NONE;
-	dst_addr.mode = IEEE802154_ADDR_SHORT;
-	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
-	dst_addr.short_addr = IEEE802154_ADDR_BROADCAST;
-
-	cb = mac_cb_init(skb);
-	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
-	cb->ackreq = false;
-
-	cb->secen = false;
-	cb->secen_override = false;
-	cb->seclevel = 0;
-
-	cb->source = src_addr;
-	cb->dest = dst_addr;
-
-	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
-
-	//Add the mac header to the data
-	memcpy( data, cb, size );
-	data[0] = cmd_frame_id;
-
-	skb->dev = wpan_dev->netdev;
-	skb->protocol = htons(ETH_P_IEEE802154);
-
-	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
-	if( 0 == r) {
-		goto out;
-	}
-
-
-error:
-	kfree_skb(skb);
-out:
-	return r;
-}
-
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -400,5 +329,4 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.ed_scan = ieee802154_ed_scan,
 	.register_active_scan_listener = ieee802154_register_active_scan_listener,
 	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
-	.send_beacon_command_frame = ieee802154_send_beacon_command_frame,
 };

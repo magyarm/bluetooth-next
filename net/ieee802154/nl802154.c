@@ -1221,6 +1221,70 @@ out:
 	return;
 }
 
+static int
+ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, u8 cmd_frame_id )
+{
+	int r = 0;
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, src_addr;
+	unsigned char *data;
+
+	//Create beacon frame / payload
+	hlen = 7; //Header is 7 octets. From the IEEE 802154 std 2011.
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	src_addr.mode = IEEE802154_ADDR_NONE;
+	dst_addr.mode = IEEE802154_ADDR_SHORT;
+	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	dst_addr.short_addr = IEEE802154_ADDR_BROADCAST;
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = false;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = src_addr;
+	cb->dest = dst_addr;
+
+	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
+	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+
+	//Add the mac header to the data
+	memcpy( data, cb, size );
+	data[0] = cmd_frame_id;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	wpan_dev->netdev->netdev_ops->ndo_start_xmit( skb, wpan_dev->netdev );
+	if( 0 == r) {
+		goto out;
+	}
+
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
+}
+
 static void nl802154_active_scan_cnf( struct work_struct *work )
 {
 	int status;
@@ -1276,7 +1340,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		netdev_dbg(dev, "Scanning channel #: %d\n", i );
 		status = rdev_set_channel(rdev, channel_page, current_channel);
 		//Send the beacon request
-		status = rdev_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
+		status = ieee802154_send_beacon_command_frame( rdev, wpan_dev, IEEE802154_CMD_BEACON_REQ );
 		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
 		status = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
 		if( 0 == status ) {
@@ -1398,12 +1462,12 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
 	struct device *dev;
-	struct net_device *netdev;
 	void (*cnf)( struct work_struct * ) = NULL;
+
+	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
 	rdev = info->user_ptr[0];
 	dev = &rdev->wpan_phy.dev;
-	netdev = NULL;
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1447,7 +1511,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 		cnf = nl802154_ed_scan_cnf;
 		break;
 	case IEEE802154_MAC_SCAN_ACTIVE:
-		netdev = info->user_ptr[1];
 		wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
 		wrk->cmd_stuff.active_scan.channel_page = channel_page;
 		wrk->cmd_stuff.active_scan.scan_channels = scan_channels;

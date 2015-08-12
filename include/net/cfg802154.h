@@ -72,8 +72,6 @@ struct cfg802154_ops {
 					void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
 					struct work_struct *work );
 	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy );
-	int	(*send_beacon_command_frame)( struct wpan_phy *wpan_phy,
-					struct wpan_dev *wpan_dev, u8 cmd_frame_id );
 };
 
 static inline bool
