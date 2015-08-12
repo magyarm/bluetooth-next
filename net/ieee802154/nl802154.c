@@ -1464,6 +1464,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		genlmsg_end( reply, hdr );
 
 		status = genlmsg_reply( reply, info );
+		printk( KERN_INFO "Number of Beacons received: %d", wrk->cmd_stuff.active_scan.result_list_size );
 		goto complete;
 	}
 
@@ -1557,7 +1558,6 @@ out:
 static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
 	u8 r;
-	u8 status = IEEE802154_SUCCESS;
 	u8 scan_type;
 	u32 scan_channels;
 	u8 scan_duration;
@@ -1653,7 +1653,7 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 
 		// Send invariant parts of the MLME-SCAN.confirm parameters
 		r =
-				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_STATUS, status ) ||
+				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_STATUS, wrk->cmd_stuff.active_scan.status ) ||
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAGE, channel_page ) ||
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, 0 ); //Todo: Replace with enum. Not using UWB so detected category is not supported
