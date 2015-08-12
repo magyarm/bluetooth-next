@@ -51,9 +51,17 @@ struct cfg802154_ops {
 				const struct wpan_phy_cca *cca);
 	int     (*set_cca_ed_level)(struct wpan_phy *wpan_phy, s32 ed_level);
 	int     (*set_tx_power)(struct wpan_phy *wpan_phy, s32 power);
+	int	(*set_addr_mode)(struct wpan_phy *wpan_phy,
+		      struct wpan_dev *wpan_dev, u8 mode);
 	int	(*set_pan_id)(struct wpan_phy *wpan_phy,
 			      struct wpan_dev *wpan_dev, __le16 pan_id);
 	int	(*set_short_addr)(struct wpan_phy *wpan_phy,
+				  struct wpan_dev *wpan_dev, __le16 short_addr);
+	int	(*set_coord_addr_mode)(struct wpan_phy *wpan_phy,
+		      struct wpan_dev *wpan_dev, u8 mode);
+	int	(*set_coord_extended_addr)(struct wpan_phy *wpan_phy,
+			      struct wpan_dev *wpan_dev, __le64 extended_addr);
+	int	(*set_coord_short_addr)(struct wpan_phy *wpan_phy,
 				  struct wpan_dev *wpan_dev, __le16 short_addr);
 	int	(*set_backoff_exponent)(struct wpan_phy *wpan_phy,
 					struct wpan_dev *wpan_dev, u8 min_be,
@@ -67,10 +75,20 @@ struct cfg802154_ops {
 	int	(*set_lbt_mode)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev, bool mode);
 	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-					u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
+	            u8 page, u32 scan_channels, u8 *level, size_t nlevel,
+				u8 duration );
+	int	(*disassoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+				u16 device_panid, u64 device_address,
+				u8 disassociate_reason, u8 tx_indirect);
+	int	(*register_disassoc_req_listener)(struct wpan_phy *wpan_phy,
+				struct wpan_dev *wpan_dev,
+				void (*callback)( struct sk_buff *, void *), void *arg);
+	void	(*deregister_disassoc_req_listener)(struct wpan_phy *wpan_phy,
+				struct wpan_dev *wpan_dev,
+				void (*callback)( struct sk_buff *, void *), void *arg);
 	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
-					void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
-					struct work_struct *work );
+				void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+				struct work_struct *work );
 	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy );
 };
 
@@ -185,9 +203,13 @@ struct wpan_dev {
 	u32 identifier;
 
 	/* MAC PIB */
+	u8 addr_mode;
 	__le16 pan_id;
 	__le16 short_addr;
 	__le64 extended_addr;
+	u8 coord_addr_mode;
+	__le16 coord_short_addr;
+	__le64 coord_extended_addr;
 
 	/* MAC BSN field */
 	atomic_t bsn;
