@@ -287,8 +287,8 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-		void (*callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
+		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
 		struct work_struct *work)
 {
 	int ret = 0;
@@ -318,6 +318,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	int hlen, tlen, size;
 	struct ieee802154_addr dst_addr, src_addr;
 	unsigned char *data;
+	struct ieee802154_sub_if_data *sdata;
 
 	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
 
@@ -327,7 +328,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
 
 	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
-	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
 	sdata->local = local;
 
 	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
@@ -361,7 +362,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct wpan_dev
 	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 
 	//Add the mac header to the data
-	r = memcpy( data, cb, size );
+	memcpy( data, cb, size );
 	data[0] = cmd_frame_id;
 
 	skb->dev = wpan_dev->netdev;

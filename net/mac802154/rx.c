@@ -31,8 +31,8 @@
 
 struct work_active_scan_receive {
 	struct sk_buff *skb;
-	struct ieee802154_hdr *hdr;
-	void (*active_scan_callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work );
+	const struct ieee802154_hdr *hdr;
+	void (*active_scan_callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work );
 	struct work_struct *active_scan_work;
 	struct work_struct work;
 };
@@ -59,7 +59,7 @@ static void rx_active_scan_receive_work( struct work_struct *work )
 	return;
 }
 
-static int ieee802154_schedule_active_scan_callback_work(struct sk_buff *skb, struct ieee802154_hdr *hdr, const struct ieee802154_local *local)
+static int ieee802154_schedule_active_scan_callback_work(struct sk_buff *skb, const struct ieee802154_hdr *hdr, const struct ieee802154_local *local)
 {
    int ret = 0;
    struct work_active_scan_receive *wrk;

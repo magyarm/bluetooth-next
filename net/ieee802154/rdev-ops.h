@@ -234,11 +234,11 @@ rdev_deregister_assoc_req_listener(struct cfg802154_registered_device *rdev, str
 }
 
 static inline int
-rdev_active_scan_register_listener(struct cfg802154_registered_device *rdev, struct genl_info *info,
-		void (*callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+rdev_active_scan_register_listener(struct cfg802154_registered_device *rdev,
+		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
 		struct work_struct *work )
 {
-	return rdev->ops->register_active_scan_listener(&rdev->wpan_phy, info, callback, work );
+	return rdev->ops->register_active_scan_listener(&rdev->wpan_phy, callback, work );
 }
 
 static inline void

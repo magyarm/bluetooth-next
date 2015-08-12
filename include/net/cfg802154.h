@@ -21,12 +21,14 @@
 #include <linux/netdevice.h>
 #include <linux/mutex.h>
 #include <linux/bug.h>
+#include <linux/workqueue.h>
 
 #include <net/nl802154.h>
 #include <net/genetlink.h>
 
 struct wpan_phy;
 struct wpan_phy_cca;
+struct ieee802154_hdr;
 
 struct cfg802154_ops {
 	struct net_device * (*add_virtual_intf_deprecated)(struct wpan_phy *wpan_phy,
@@ -67,8 +69,7 @@ struct cfg802154_ops {
 	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 					u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
-					struct genl_info *info,
-					void (*callback)( struct sk_buff *skb, struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
+					void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
 					struct work_struct *work );
 	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy );
 	int	(*send_beacon_command_frame)( struct wpan_phy *wpan_phy,

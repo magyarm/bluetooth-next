@@ -1311,9 +1311,8 @@ out:
 	return;
 }
 
-int nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, struct ieee802154_hdr *receive_hdr, struct work_struct *active_scan_work )
+void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, const struct ieee802154_hdr *receive_hdr, struct work_struct *active_scan_work )
 {
-	int ret = 0;
 	struct ieee802154_beacon_indication beacon_notify;
 	struct net *net;
 	struct nlattr *nl_pan_desc_entry;
@@ -1368,14 +1367,14 @@ int nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, struc
 			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify.pan_desc.key_id_mode) ||
 			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify.pan_desc.key_src) ||
 			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify.pan_desc.key_index)) {
-		ret = -ENOBUFS;
+		wrk->cmd_stuff.active_scan.status = -ENOBUFS;
 		goto free_reply;
 	}
 	nla_nest_end( wrk->cmd_stuff.active_scan.reply, nl_pan_desc_entry );
 
 	net = genl_info_net(wrk->info);
 
-	ret = genlmsg_reply( wrk->cmd_stuff.active_scan.reply, wrk->info);
+	wrk->cmd_stuff.active_scan.status = genlmsg_reply( wrk->cmd_stuff.active_scan.reply, wrk->info);
 
 	wrk->cmd_stuff.active_scan.result_list_size++;
 
@@ -1384,7 +1383,7 @@ int nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, struc
 free_reply:
 	nlmsg_free( wrk->cmd_stuff.active_scan.reply );
 out:
-	return ret;
+	return;
 }
 
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
@@ -1492,7 +1491,7 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAGE, channel_page ) ||
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, 0 ); //Todo: Replace with enum. Not using UWB so detected category is not supported
 
-		r = rdev_active_scan_register_listener(rdev, info, nl802154_active_scan_pan_descriptor_send, &wrk->work.work );
+		r = rdev_active_scan_register_listener(rdev, nl802154_active_scan_pan_descriptor_send, &wrk->work.work );
 	}
 
 	init_completion( &wrk->completion );
