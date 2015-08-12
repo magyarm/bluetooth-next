@@ -20,11 +20,14 @@
 #include <net/mac802154.h>
 #include <net/netlink.h>
 #include <net/nl802154.h>
+#include <net/ieee802154_netdev.h>
 #include <net/sock.h>
 
 #include "nl802154.h"
 #include "rdev-ops.h"
 #include "core.h"
+
+#include "../mac802154/ieee802154_i.h"
 
 struct work802154 {
 	// probably should add a mutex
@@ -1401,10 +1404,10 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 	kfree( wrk );
 }
 
-/*
 static int
-ieee802154_assoc_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-		u8 addr_mode, u16 coord_pan_id, u64 coord_addr ){
+nl802154_assoc_send_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		u8 addr_mode, u16 coord_pan_id, u64 coord_addr)
+{
 
 	int r = 0;
 	struct sk_buff *skb;
@@ -1413,35 +1416,16 @@ ieee802154_assoc_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan
 	struct ieee802154_addr dst_addr, source_addr;
 	unsigned char *data;
 	u64 src_addr;
-	struct ieee802154_sub_if_data *sdata;
-	struct ieee802154_local * local;
 
-	src_addr = -1;
-
-	local = wpan_phy_priv(wpan_phy);
-
-	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
-		if (sdata->wpan_dev.iftype != NL802154_IFTYPE_NODE)
-			continue;
-
-		if (!ieee802154_sdata_running(sdata))
-			continue;
-
-		src_addr = sdata->wpan_dev.extended_addr;
-		break;
-	}
+	src_addr = wpan_dev->extended_addr;
 
 	memset( &source_addr, 0, sizeof( source_addr ) );
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
-	//Create beacon frame / payload
 	hlen = 18;
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
 
-	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
-	sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
-	sdata->local = local;
 	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
 	if (!skb){
 		goto error;
@@ -1479,8 +1463,7 @@ ieee802154_assoc_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan
 
 	cb->intra_pan = true;
 
-	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
-	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
 
 	//Add the mac header to the data
 	memcpy( data, cb, size );
@@ -1499,7 +1482,6 @@ error:
 out:
 	return r;
 }
-*/
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 {
@@ -1614,11 +1596,11 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	// XXX: define this function statically in this file.
 	// XXX: eventually, it should be handled from userspace
-//	r = rdev_assoc_empty_data_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
-//	if ( 0 != r ) {
-//		dev_err( &dev->dev, "ack assoc_req failed (%d)\n", r );
-//		goto dereg_listener;
-//	}
+	r = nl802154_assoc_send_empty_data_req( &rdev->wpan_phy, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "ack assoc_req failed (%d)\n", r );
+		goto dereg_listener;
+	}
 
 	// XXX: <END SNIP>
 
