@@ -363,6 +363,7 @@ static void atusb_xmit_complete(struct urb *urb)
 
 static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 {
+	printk( KERN_INFO "Inside: %s\n", __FUNCTION__);
 	struct atusb *atusb = hw->priv;
 	struct usb_device *usb_dev = atusb->usb_dev;
 	int ret;
@@ -379,6 +380,7 @@ static int atusb_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 			     skb->len, atusb_xmit_complete, NULL);
 	ret = usb_submit_urb(atusb->tx_urb, GFP_ATOMIC);
 	dev_dbg(&usb_dev->dev, "atusb_xmit done (%d)\n", ret);
+	printk( KERN_INFO "atusb_xmit done (%d)\n", ret);
 	return ret;
 }
 

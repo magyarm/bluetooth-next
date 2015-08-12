@@ -1315,8 +1315,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	r = 0;
 	goto out;
 
-free_reply:
-	nlmsg_free( wrk->cmd_stuff.active_scan.reply );
 free_wrk:
 	kfree( wrk );
 
@@ -1355,7 +1353,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct net_devi
 	src_addr.mode = IEEE802154_ADDR_NONE;
 	dst_addr.mode = IEEE802154_ADDR_SHORT;
 	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
-	dst_addr.short_addr = IEEE802154_ADDR_BROADCAST;
+	dst_addr.short_addr = 0xBEEF;//IEEE802154_ADDR_BROADCAST;
 
 	cb = mac_cb_init(skb);
 	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
@@ -1377,6 +1375,9 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct net_devi
 
 	skb->dev = netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
+
+	printk( KERN_INFO "The mac frame going out: %x, %x, %x, %x, %x, %x, %x, %x",
+			skb->head[0], skb->head[1], skb->head[2], skb->head[3],skb->head[4], skb->head[5],skb->head[6], skb->data[0]);
 
 	netdev->netdev_ops->ndo_start_xmit( skb, netdev );
 	if( 0 == r) {
@@ -1457,6 +1458,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 //		status = nl802154_active_scan_put_pan_descriptors( reply, result_list_size, pan_descriptor_list ;)
 
 		if ( 0 != status ) {
+			printk( KERN_INFO "Number of Beacons received: %d", wrk->cmd_stuff.active_scan.result_list_size );
 			dev_err( &netdev->dev, "nla_put_failure (%d)\n", status );
 			goto nla_put_failure;
 		}
@@ -1464,7 +1466,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		genlmsg_end( reply, hdr );
 
 		status = genlmsg_reply( reply, info );
-		printk( KERN_INFO "Number of Beacons received: %d", wrk->cmd_stuff.active_scan.result_list_size );
+
 		goto complete;
 	}
 
@@ -1481,7 +1483,6 @@ out:
 void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, const struct ieee802154_hdr *receive_hdr, struct work_struct *active_scan_work )
 {
 	struct ieee802154_beacon_indication beacon_notify;
-	struct net *net;
 	struct nlattr *nl_pan_desc_entry;
 
 	struct cfg802154_registered_device *rdev;
@@ -1521,6 +1522,7 @@ void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, cons
 	beacon_notify.pan_desc.key_src         = 0;
 	beacon_notify.pan_desc.key_index       = receive_hdr->sec.key_id;
 
+#if 0
 	nl_pan_desc_entry = nla_nest_start( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESCRIPTOR );
 	if (nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify.pan_desc.src_addr_mode ) ||
 			nla_put_u16( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify.pan_desc.src_pan_id) ||
@@ -1540,10 +1542,9 @@ void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, cons
 		goto free_reply;
 	}
 	nla_nest_end( wrk->cmd_stuff.active_scan.reply, nl_pan_desc_entry );
+#endif
 
-	net = genl_info_net(wrk->info);
-
-	wrk->cmd_stuff.active_scan.status = genlmsg_reply( wrk->cmd_stuff.active_scan.reply, wrk->info);
+	//wrk->cmd_stuff.active_scan.status = genlmsg_reply( wrk->cmd_stuff.active_scan.reply, wrk->info);
 
 	wrk->cmd_stuff.active_scan.result_list_size++;
 
@@ -1607,13 +1608,6 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 		}
 
 	switch( scan_type ) {
-	case IEEE802154_MAC_SCAN_ED:
-		wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
-		wrk->cmd_stuff.ed_scan.channel_page = channel_page;
-		wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
-		wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
-		cnf = nl802154_ed_scan_cnf;
-		break;
 	case IEEE802154_MAC_SCAN_ACTIVE:
 		wrk->cmd = NL802154_CMD_ACTIVE_SCAN_REQ;
 		wrk->cmd_stuff.active_scan.channel_page = channel_page;
@@ -1657,7 +1651,10 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAGE, channel_page ) ||
 				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, 0 ); //Todo: Replace with enum. Not using UWB so detected category is not supported
-
+		if ( 0 != r ) {
+			dev_err( dev, "nla_put_failure (%d)\n", r );
+			goto free_reply;
+		}
 		r = rdev_active_scan_register_listener(rdev, nl802154_active_scan_pan_descriptor_send, &wrk->work.work );
 	}
 
