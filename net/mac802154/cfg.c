@@ -367,12 +367,122 @@ static inline bool is_short_address( u16 addr ) {
 #define PRIx64 "llx"
 #endif
 
-static inline int
-ieee802154_header_create( struct sk_buff *skb, struct wpan_dev *wpan_dev,
-						int frame_type, struct ieee802154_addr *dst,
-						struct ieee802154_addr *src, size_t sz )
-{
-	return -ENOSYS;
+static int
+ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
+		u8 capability_information ){
+
+	int r;
+
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, source_addr;
+	unsigned char *data;
+	u64 src_addr;
+	struct ieee802154_sub_if_data *sdata;
+	struct ieee802154_local * local;
+
+	src_addr = -1;
+
+	local = wpan_phy_priv(wpan_phy);
+
+	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
+		if (sdata->wpan_dev.iftype != NL802154_IFTYPE_NODE)
+			continue;
+
+		if (!ieee802154_sdata_running(sdata))
+			continue;
+
+		src_addr = sdata->wpan_dev.extended_addr;
+		break;
+	}
+
+	memset( &source_addr, 0, sizeof( source_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
+
+	//Create beacon frame / payload
+	hlen = 18;
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	dev_dbg( &wpan_dev->netdev->dev, "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	dev_dbg( &wpan_dev->netdev->dev, "Address of the netdev device structure: %p\n", wpan_dev->netdev );
+	dev_dbg( &wpan_dev->netdev->dev, "Address of ieee802154_local * local from wpan_phy_priv: %p\n", local );
+
+	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
+	sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+
+	sdata->local = local;
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		r = -ENOMEM;
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	source_addr.mode = IEEE802154_ADDR_LONG;
+	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	source_addr.extended_addr = src_addr;
+
+	dst_addr.mode = addr_mode;
+	dst_addr.pan_id = coord_pan_id;
+
+	if ( IEEE802154_ADDR_SHORT == addr_mode ){
+		dst_addr.short_addr = (__le16)coord_addr;
+	} else {
+		dst_addr.extended_addr = coord_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = true;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = source_addr;
+	cb->dest = dst_addr;
+
+	dev_dbg( &wpan_dev->netdev->dev, "DSN value in wpan_dev: %p\n", &wpan_dev->dsn);
+
+	dev_dbg( &wpan_dev->netdev->dev, "Dest addr: 0x%04x\n", dst_addr.short_addr );
+	dev_dbg( &wpan_dev->netdev->dev, "Dest addr long: 0x%016" PRIx64 "\n", dst_addr.extended_addr );
+	dev_dbg( &wpan_dev->netdev->dev, "Src addr: 0x%04x\n", source_addr.short_addr );
+	dev_dbg( &wpan_dev->netdev->dev, "Src addr long: 0x%016" PRIx64 "\n", source_addr.extended_addr );
+
+	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+
+	//Add the mac header to the data
+	memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_ASSOCIATION_REQ;
+	data[1] = capability_information;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	dev_dbg( &wpan_dev->netdev->dev, "Data bytes sent out %x, %x",data[0], data[1]);
+
+
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	if( 0 != r) {
+		goto error;
+	}
+
+	goto out;
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
 }
 
 static unsigned int
@@ -461,6 +571,7 @@ ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
 	sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+
 	sdata->local = local;
 
 	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
@@ -543,6 +654,46 @@ out:
 	return r;
 }
 
+static int
+ieee802154_register_assoc_req_listener( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, void (*callback)(struct sk_buff *, void *), void *arg )
+{
+	int r;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	BUG_ON( NULL == local );
+	if ( NULL != arg && NULL == callback ) {
+		r = -EINVAL;
+		goto out;
+	}
+	// In the future, this will probably adopt more of a list_head approach.
+	// For now, only allow one unique, non-NULL listener.
+	if ( !( NULL == local->assoc_req_callback || NULL == callback ) ) {
+		r = -EBUSY;
+		goto out;
+	}
+	local->assoc_req_callback = callback;
+	local->assoc_req_arg = NULL == callback ? NULL : arg;
+	r = 0;
+out:
+	return r;
+}
+
+static void
+ieee802154_deregister_assoc_req_listener( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, void (*callback)(struct sk_buff *, void *), void *arg )
+{
+	int r;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	BUG_ON( NULL == local );
+	if ( !( local->assoc_req_callback == callback && local->assoc_req_arg == arg ) ) {
+		r = -EINVAL;
+		goto out;
+	}
+	local->assoc_req_callback = NULL;
+	local->assoc_req_arg = NULL;
+	r = 0;
+out:
+	return;
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -565,6 +716,9 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
+	.assoc_req = ieee802154_assoc_req,
+	.register_assoc_req_listener = ieee802154_register_assoc_req_listener,
+	.deregister_assoc_req_listener = ieee802154_deregister_assoc_req_listener,
 	.disassoc_req = ieee802154_disassoc_req,
 	.register_disassoc_req_listener = ieee802154_register_disassoc_req_listener,
 	.deregister_disassoc_req_listener = ieee802154_deregister_disassoc_req_listener,
