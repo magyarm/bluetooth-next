@@ -15,6 +15,7 @@
 
 #include <net/rtnetlink.h>
 #include <net/cfg802154.h>
+#include <net/ieee802154_netdev.h>
 
 #include "ieee802154_i.h"
 #include "driver-ops.h"
@@ -355,29 +356,43 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_register_beacon_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
+ieee802154_register_beacon_listener( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, void (*callback)(struct sk_buff *, const struct ieee802154_hdr *, void *), void *arg )
 {
-	int ret = 0;
+	int r;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->beacon_listener = info;
-	ret = drv_start( local );
-	return ret;
+	BUG_ON( NULL == local );
+	if ( NULL != arg && NULL == callback ) {
+		r = -EINVAL;
+		goto out;
+	}
+	// In the future, this will probably adopt more of a list_head approach.
+	// For now, only allow one unique, non-NULL listener.
+	if ( !( NULL == local->beacon_ind_callback || NULL == callback ) ) {
+		r = -EBUSY;
+		goto out;
+	}
+	local->beacon_ind_callback = callback;
+	local->beacon_ind_arg = (NULL == callback) ? NULL : arg;
+	r = 0;
+out:
+	return r;
 }
 
-static int
-ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy )
+static void
+ieee802154_deregister_beacon_listener( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, void (*callback)(struct sk_buff *, const struct ieee802154_hdr *, void *), void *arg )
 {
-	int ret = 0;
+	int r;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->beacon_listener = NULL;
-	return ret;
-}
-
-int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info )
-{
-	int ret;
-	ret = nl802154_beacon_notify_indication( beacon_notify, info );
-	return ret;
+	BUG_ON( NULL == local );
+	if ( !( local->beacon_ind_callback == callback && local->beacon_ind_arg == arg ) ) {
+		r = -EINVAL;
+		goto	 out;
+	}
+	local->beacon_ind_callback = NULL;
+	local->beacon_ind_arg = NULL;
+	r = 0;
+out:
+	return;
 }
 
 static inline bool is_short_address( u16 addr ) {
