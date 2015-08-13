@@ -33,7 +33,7 @@ struct work_active_scan_receive {
 	struct sk_buff *skb;
 	const struct ieee802154_hdr *hdr;
 	void (*active_scan_callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg );
-	struct work_struct *active_scan_work;
+	void *active_scan_work;
 	struct work_struct work;
 };
 
@@ -53,7 +53,7 @@ static void rx_active_scan_receive_work( struct work_struct *work )
 
 	wrk = container_of( work, struct work_active_scan_receive, work );
 
-	wrk->active_scan_callback( wrk->skb, wrk->hdr, wrk->active_scan_work );
+	wrk->active_scan_callback( wrk->skb, wrk->hdr, (struct wrk_struct *)wrk->active_scan_work );
 
 	kfree( wrk );
 	return;

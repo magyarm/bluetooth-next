@@ -1467,7 +1467,6 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 				nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, wrk->cmd_stuff.active_scan.result_list_size );
 
 		if ( 0 != status ) {
-			printk( KERN_INFO "Number of Beacons received: %d", wrk->cmd_stuff.active_scan.result_list_size );
 			dev_err( &netdev->dev, "nla_put_failure (%d)\n", status );
 			goto nla_put_failure;
 		}

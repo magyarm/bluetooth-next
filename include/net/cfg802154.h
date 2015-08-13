@@ -23,7 +23,6 @@
 #include <linux/bug.h>
 
 #include <net/nl802154.h>
-#include <net/genetlink.h>
 
 struct wpan_phy;
 struct wpan_phy_cca;
