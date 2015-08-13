@@ -74,9 +74,6 @@ struct cfg802154_ops {
 	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 			u8 page, u32 scan_channels, u8 *level, size_t nlevel,
 			u8 duration );
-	int	(*assoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-				u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
-				u8 capability_information );
 	int	(*register_assoc_req_listener)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev,
 				void (*callback)( struct sk_buff *, void *), void *arg);

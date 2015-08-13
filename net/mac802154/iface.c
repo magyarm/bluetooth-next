@@ -372,6 +372,7 @@ static int mac802154_header_create(struct sk_buff *skb,
 	hdr.fc.type = cb->type;
 	hdr.fc.security_enabled = cb->secen;
 	hdr.fc.ack_request = cb->ackreq;
+	hdr.fc.intra_pan = cb->intra_pan;
 	hdr.seq = atomic_inc_return(&dev->ieee802154_ptr->dsn) & 0xFF;
 
 	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)

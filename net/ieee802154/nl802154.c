@@ -515,7 +515,6 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
 	CMD(ed_scan, ED_SCAN_REQ);
-	CMD(assoc_req, ASSOC_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1426,7 +1425,8 @@ nl802154_assoc_send_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *w
 	memset( &source_addr, 0, sizeof( source_addr ) );
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
-	hlen = 18;
+	hlen = 2 + 2 + 1 + 8 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Association Request + Destination PAN ID
+	hlen += IEEE802154_ADDR_LONG == addr_mode ? 8 : 2; // Extended or Short Destination address
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
 
@@ -1442,7 +1442,6 @@ nl802154_assoc_send_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *w
 	data = skb_put(skb, size);
 
 	source_addr.mode = IEEE802154_ADDR_LONG;
-	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
 	source_addr.extended_addr = src_addr;
 
 	dst_addr.mode = addr_mode;
@@ -1480,6 +1479,111 @@ nl802154_assoc_send_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *w
 	if( 0 == r) {
 		goto out;
 	}
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
+}
+
+static int
+nl802154_assoc_send_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
+		u8 capability_information ){
+
+	int r;
+
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, source_addr;
+	unsigned char *data;
+	u64 src_addr;
+
+	struct net_device *netdev;
+	struct device *logdev;
+
+	netdev = wpan_dev->netdev;
+	logdev = &netdev->dev;
+
+	src_addr = wpan_dev->extended_addr;
+
+	memset( &source_addr, 0, sizeof( source_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
+
+	//Create beacon frame / payload
+	hlen = 2 + 2 + 1 + 8 + 2 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Association Request + Source PAN ID + Dest PAN ID
+	hlen += IEEE802154_ADDR_LONG == addr_mode ? 8 : 2; // Extended or Short Destination address
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	dev_dbg( logdev, "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	dev_dbg( logdev, "Address of the netdev device structure: %p\n", wpan_dev->netdev );
+	//dev_dbg( logdev, "Address of ieee802154_local * local from wpan_phy_priv: %p\n", local );
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		r = -ENOMEM;
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	source_addr.mode = IEEE802154_ADDR_LONG;
+	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	source_addr.extended_addr = src_addr;
+
+	dst_addr.mode = addr_mode;
+	dst_addr.pan_id = coord_pan_id;
+
+	if ( IEEE802154_ADDR_SHORT == addr_mode ){
+		dst_addr.short_addr = (__le16)coord_addr;
+	} else {
+		dst_addr.extended_addr = coord_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = true;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = source_addr;
+	cb->dest = dst_addr;
+
+	//No security fields in yet.
+
+	dev_dbg( logdev, "DSN value in wpan_dev: %p\n", &wpan_dev->dsn);
+
+	dev_dbg( logdev, "Dest addr: 0x%04x\n", dst_addr.short_addr );
+	dev_dbg( logdev, "Dest addr long: 0x%016" PRIx64 "\n", dst_addr.extended_addr );
+	dev_dbg( logdev, "Src addr: 0x%04x\n", source_addr.short_addr );
+	dev_dbg( logdev, "Src addr long: 0x%016" PRIx64 "\n", source_addr.extended_addr );
+
+	netdev->header_ops->create( skb, netdev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+
+	//Add the mac header to the data
+	memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_ASSOCIATION_REQ;
+	data[1] = capability_information;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	dev_dbg( logdev, "Data bytes sent out %x, %x\n", data[0], data[1]);
+
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	if( 0 != r) {
+		goto error;
+	}
+
+	goto out;
 
 error:
 	kfree_skb(skb);
@@ -1602,8 +1706,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	dev_dbg( logdev, "channel_number: %u, channel_page: %u, coord_addr_mode: %u, coord_pan_id: 0x%04x, coord_address: %s, capability_information: 0x%02x, timeout_ms: %u\n",
 		channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_addr_str, capability_information, timeout_ms );
 
-	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
-			capability_information );
+	r = nl802154_assoc_send_assoc_req( &rdev->wpan_phy, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, capability_information );
 	if ( 0 != r ) {
 		dev_err( logdev, "send assoc_req failed (%d)\n", r );
 		goto dereg_listener;
