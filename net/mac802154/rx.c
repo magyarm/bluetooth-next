@@ -114,7 +114,15 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 			sdata->local->beacon_ind_callback( skb, hdr, sdata->local->beacon_ind_arg );
 			return 0;
 		}
-		break;
+		goto fail;
+	case IEEE802154_FC_TYPE_MAC_CMD:
+		if( 0x2 == skb->data[0] ){
+			if ( sdata->local->assoc_req_callback ){
+				sdata->local->assoc_req_callback( skb, sdata->local->assoc_req_arg );
+				return 0;
+			}
+		}
+		goto fail;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
