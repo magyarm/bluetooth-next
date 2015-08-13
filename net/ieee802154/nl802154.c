@@ -54,8 +54,6 @@ struct work802154 {
 			u8 scan_duration;
 			u8 result_list_size;
 			u32 current_channel;
-			struct sk_buff *reply;
-			void *hdr;
 		} active_scan;
 	} cmd_stuff;
 	struct completion completion;
@@ -1368,7 +1366,6 @@ out:
 static void nl802154_active_scan_cnf( struct work_struct *work )
 {
 	int status;
-
 	struct work802154 *wrk;
 	struct sk_buff *skb;
 	struct genl_info *info;
@@ -1395,7 +1392,6 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	scan_channels = wrk->cmd_stuff.active_scan.scan_channels;
 	scan_duration = wrk->cmd_stuff.active_scan.scan_duration;
 	current_channel = wrk->cmd_stuff.active_scan.current_channel;
-	hdr  = &wrk->cmd_stuff.active_scan.hdr;
 
 	//Scanning process
 	//Check that the current channel is selected in the scan_channels bit mask.
@@ -1432,8 +1428,8 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 			goto out;
 		}
 
-		wrk->cmd_stuff.active_scan.hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
-		if ( NULL == wrk->cmd_stuff.active_scan.hdr ) {
+		hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
+		if ( NULL == hdr ) {
 			status = -ENOBUFS;
 			goto free_reply;
 		}
