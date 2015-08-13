@@ -254,20 +254,6 @@ rdev_ed_scan(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev
 }
 
 static inline int
-rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-				u8 channel_number, u8 channel_page, u8 coord_addr_mode, u16 coord_pan_id, u64 coord_address,
-				u8 capability_information )
-{
-	int ret = 0;
-
-	ret = rdev->ops->assoc_req( &rdev->wpan_phy, wpan_dev,
-		coord_addr_mode, coord_pan_id, coord_address,
-		capability_information );
-
-	return ret;
-}
-
-static inline int
 rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev,
 		struct wpan_dev *wpan_dev,
 		void (*callback)(struct sk_buff *skb, void *arg), void *arg)
