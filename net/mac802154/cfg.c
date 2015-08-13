@@ -367,14 +367,6 @@ static inline bool is_short_address( u16 addr ) {
 #define PRIx64 "llx"
 #endif
 
-static inline int
-ieee802154_header_create( struct sk_buff *skb, struct wpan_dev *wpan_dev,
-						int frame_type, struct ieee802154_addr *dst,
-						struct ieee802154_addr *src, size_t sz )
-{
-	return -ENOSYS;
-}
-
 static unsigned int
 ieee802154_num_listeners( struct ieee802154_local *local ) {
 	unsigned int r;

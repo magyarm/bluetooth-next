@@ -170,6 +170,7 @@ enum nl802154_attrs {
 	NL802154_ATTR_PAN_DESC_KEY_ID_MODE,
 	NL802154_ATTR_PAN_DESC_KEY_SRC,
 	NL802154_ATTR_PAN_DESC_KEY_INDEX,
+
 	/* add attributes here, update the policy in nl802154.c */
 
 	__NL802154_ATTR_AFTER_LAST,

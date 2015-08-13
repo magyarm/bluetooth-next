@@ -47,7 +47,6 @@ struct work802154 {
 			u16 device_panid;
 			u64 device_address;
 		} disassoc;
-
 		struct active_scan {
 			u8 status;
 			u8 channel_page;
@@ -298,7 +297,6 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_ADDR_LIST] = { .type = NLA_NESTED },
 	[NL802154_ATTR_SDU_LENGTH] = { .type = NLA_U32 },
 	[NL802154_ATTR_SDU] = { .type = NLA_NESTED },
-
 };
 
 /* message building helper */
