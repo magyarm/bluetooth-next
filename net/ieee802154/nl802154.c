@@ -1241,7 +1241,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
 	struct device *dev;
-	void (*cnf)( struct work_struct * ) = NULL;
 
 	rdev = info->user_ptr[0];
 	dev = &rdev->wpan_phy.dev;
@@ -1274,32 +1273,20 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-		if ( NULL == wrk ) {
-			r = -ENOMEM;
-			goto out;
-		}
-
-	switch( scan_type ) {
-	case IEEE802154_MAC_SCAN_ED:
-		wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
-		wrk->cmd_stuff.ed_scan.channel_page = channel_page;
-		wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
-		wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
-		cnf = nl802154_ed_scan_cnf;
-		break;
-	default:
-		dev_err( dev, "invalid scan type %u\n", scan_type );
-		r = -EINVAL;
+	if ( NULL == wrk ) {
+		r = -ENOMEM;
 		goto out;
-		break;
 	}
 
+	wrk->cmd = NL802154_CMD_ED_SCAN_REQ;
 	wrk->skb = skb;
 	wrk->info = info;
-
-	INIT_DELAYED_WORK( &wrk->work, cnf );
+	wrk->cmd_stuff.ed_scan.channel_page = channel_page;
+	wrk->cmd_stuff.ed_scan.scan_channels = scan_channels;
+	wrk->cmd_stuff.ed_scan.scan_duration = scan_duration;
 
 	init_completion( &wrk->completion );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_ed_scan_cnf );
 	r = schedule_delayed_work( &wrk->work, 0 ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
 		dev_err( dev, "schedule_delayed_work failed (%d)\n", r );
