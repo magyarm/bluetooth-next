@@ -29,12 +29,6 @@
 
 #include "ieee802154_i.h"
 
-struct workbeaconreceive {
-	struct ieee802154_beacon_indication ind;
-	struct genl_info *beacon_listener;
-	struct work_struct work;
-};
-
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -110,7 +104,7 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	case IEEE802154_FC_TYPE_DATA:
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
-		if( sdata->local->beacon_ind_callback && sdata->local->beacon_ind_arg ) {
+		if( sdata->local->beacon_ind_callback ) {
 			sdata->local->beacon_ind_callback( skb, hdr, sdata->local->beacon_ind_arg );
 			return 0;
 		}
