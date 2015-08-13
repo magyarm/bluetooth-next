@@ -14,7 +14,6 @@
  */
 
 #include <linux/rtnetlink.h>
-#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
@@ -1234,7 +1233,6 @@ out:
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
 	u8 r;
-	u8 status = IEEE802154_SUCCESS;
 	u8 scan_type;
 	u32 scan_channels;
 	u8 scan_duration;
@@ -1323,7 +1321,7 @@ out:
 }
 
 static int
-ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct net_device *netdev, u8 cmd_frame_id )
+ieee802154_send_beacon_command_frame( struct net_device *netdev, u8 cmd_frame_id )
 {
 	int r = 0;
 	struct sk_buff *skb;
@@ -1336,8 +1334,6 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct net_devi
 	hlen = 7; //Header is 7 octets. From the IEEE 802154 std 2011.
 	tlen = netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Beacon Request Frame Format" with a define
-
-	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
 	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
 	if (!skb){
@@ -1365,7 +1361,6 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct net_devi
 
 	cb->source = src_addr;
 	cb->dest = dst_addr;
-	printk( KERN_INFO "netdev address: %p", netdev );
 
 	r = netdev->header_ops->create( skb, netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 
@@ -1376,10 +1371,7 @@ ieee802154_send_beacon_command_frame( struct wpan_phy *wpan_phy, struct net_devi
 	skb->dev = netdev;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
-	printk( KERN_INFO "The mac frame going out: %x, %x, %x, %x, %x, %x, %x, %x",
-			skb->head[0], skb->head[1], skb->head[2], skb->head[3],skb->head[4], skb->head[5],skb->head[6], skb->data[0]);
-
-	netdev->netdev_ops->ndo_start_xmit( skb, netdev );
+	r = netdev->netdev_ops->ndo_start_xmit( skb, netdev );
 	if( 0 == r) {
 		goto out;
 	}
@@ -1422,7 +1414,6 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	scan_channels = wrk->cmd_stuff.active_scan.scan_channels;
 	scan_duration = wrk->cmd_stuff.active_scan.scan_duration;
 	current_channel = wrk->cmd_stuff.active_scan.current_channel;
-	reply = (struct sk_buff *)&wrk->cmd_stuff.active_scan.reply;
 	hdr  = &wrk->cmd_stuff.active_scan.hdr;
 
 	//Scanning process
@@ -1444,7 +1435,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		printk( KERN_INFO "Scanning channel #: %d\n", current_channel);
 		status = rdev_set_channel(rdev, channel_page, current_channel);
 		//Send the beacon request
-		status = ieee802154_send_beacon_command_frame( &rdev->wpan_phy, netdev, IEEE802154_CMD_BEACON_REQ );
+		status = ieee802154_send_beacon_command_frame( netdev, IEEE802154_CMD_BEACON_REQ );
 		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
 		status = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
 		if( 0 == status ) {
@@ -1454,8 +1445,26 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 
 	if( IEEE802154_MAX_CHANNEL == current_channel || status != 0) {
 		//Add the remaining MLME-SCAN.confirm parameters as netlink attributes and send
-		status = nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, wrk->cmd_stuff.active_scan.result_list_size );
-//		status = nl802154_active_scan_put_pan_descriptors( reply, result_list_size, pan_descriptor_list ;)
+		reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+		if ( NULL == reply ) {
+			status = -ENOMEM;
+			dev_err( &netdev->dev, "nlmsg_new failed (%d)\n", status );
+			goto out;
+		}
+
+		wrk->cmd_stuff.active_scan.hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
+		if ( NULL == wrk->cmd_stuff.active_scan.hdr ) {
+			status = -ENOBUFS;
+			goto free_reply;
+		}
+
+		// Send invariant parts of the MLME-SCAN.confirm parameters
+		status =
+				nla_put_u8( reply, NL802154_ATTR_SCAN_STATUS, wrk->cmd_stuff.active_scan.status ) ||
+				nla_put_u8( reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
+				nla_put_u8( reply, NL802154_ATTR_PAGE, channel_page ) ||
+				nla_put_u8( reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, 0 )|| //Todo: Replace with enum. Not using UWB so detected category is not supported
+				nla_put_u8( reply, NL802154_ATTR_SCAN_RESULT_LIST_SIZE, wrk->cmd_stuff.active_scan.result_list_size );
 
 		if ( 0 != status ) {
 			printk( KERN_INFO "Number of Beacons received: %d", wrk->cmd_stuff.active_scan.result_list_size );
@@ -1470,17 +1479,18 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		goto complete;
 	}
 
+free_reply:
 nla_put_failure:
 	nlmsg_free( reply );
 complete:
-	rdev_active_scan_deregister_listener( rdev );
+	rdev_active_scan_deregister_listener( rdev, NULL, NULL, NULL );
 	complete( &wrk->completion );
 	kfree( wrk );
 out:
 	return;
 }
 
-void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, const struct ieee802154_hdr *receive_hdr, struct work_struct *active_scan_work )
+void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, const struct ieee802154_hdr *receive_hdr, void *arg )
 {
 	struct ieee802154_beacon_indication beacon_notify;
 	struct nlattr *nl_pan_desc_entry;
@@ -1490,12 +1500,12 @@ void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, cons
 
 	struct work802154 *wrk;
 
-	struct skbuff *msg;
+	struct sk_buff *msg;
 	void *hdr;
 
 	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
-	wrk = container_of( to_delayed_work( active_scan_work ), struct work802154, work );
+	wrk = container_of( to_delayed_work( (struct work_struct *)arg ), struct work802154, work );
 
 	rdev = wrk->info->user_ptr[0];
 	wpan_dev = (struct wpan_dev *)&rdev->wpan_phy.dev;
@@ -1580,12 +1590,14 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
 	struct device *dev;
+	struct net_device *netdev;
 	void (*cnf)( struct work_struct * ) = NULL;
 
 	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
 	rdev = info->user_ptr[0];
 	dev = &rdev->wpan_phy.dev;
+	netdev = info->user_ptr[1];
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1644,33 +1656,7 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 	INIT_DELAYED_WORK( &wrk->work, cnf );
 
 	if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
-		//Initialize the netlink reply and header on the first entry to active scan work
-#if 0
-		wrk->cmd_stuff.active_scan.reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-		if ( NULL == wrk->cmd_stuff.active_scan.reply ) {
-			r = -ENOMEM;
-			dev_err( dev, "nlmsg_new failed (%d)\n", r );
-			goto out;
-		}
-
-		wrk->cmd_stuff.active_scan.hdr = nl802154hdr_put( wrk->cmd_stuff.active_scan.reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ACTIVE_SCAN_CNF );
-		if ( NULL == wrk->cmd_stuff.active_scan.hdr ) {
-			r = -ENOBUFS;
-			goto free_reply;
-		}
-
-		// Send invariant parts of the MLME-SCAN.confirm parameters
-		r =
-				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_STATUS, wrk->cmd_stuff.active_scan.status ) ||
-				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_TYPE, IEEE802154_MAC_SCAN_ACTIVE ) ||
-				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAGE, channel_page ) ||
-				nla_put_u8( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_SCAN_DETECTED_CATEGORY, 0 ); //Todo: Replace with enum. Not using UWB so detected category is not supported
-		if ( 0 != r ) {
-			dev_err( dev, "nla_put_failure (%d)\n", r );
-			goto free_reply;
-		}
-#endif
-		r = rdev_active_scan_register_listener(rdev, nl802154_active_scan_pan_descriptor_send, &wrk->work.work );
+		r = rdev_active_scan_register_listener(rdev, netdev, nl802154_active_scan_pan_descriptor_send, (void*)&wrk->work.work );
 	}
 
 	init_completion( &wrk->completion );
@@ -1685,8 +1671,6 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 	r = 0;
 	goto out;
 
-free_reply:
-	nlmsg_free( wrk->cmd_stuff.active_scan.reply );
 free_wrk:
 	kfree( wrk );
 

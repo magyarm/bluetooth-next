@@ -312,17 +312,19 @@ rdev_deregister_disassoc_req_listener(struct cfg802154_registered_device *rdev, 
 }
 
 static inline int
-rdev_active_scan_register_listener(struct cfg802154_registered_device *rdev,
-		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
-		struct work_struct *work )
+rdev_active_scan_register_listener(struct cfg802154_registered_device *rdev, struct net_device *netdev,
+		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg),
+		void *arg )
 {
-	return rdev->ops->register_active_scan_listener(&rdev->wpan_phy, callback, work );
+	return rdev->ops->register_active_scan_listener(&rdev->wpan_phy, netdev, callback, arg );
 }
 
 static inline void
-rdev_active_scan_deregister_listener(struct cfg802154_registered_device *rdev )
+rdev_active_scan_deregister_listener(struct cfg802154_registered_device *rdev, struct net_device *netdev,
+		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg),
+		void *arg )
 {
-	rdev->ops->deregister_active_scan_listener(&rdev->wpan_phy );
+	rdev->ops->deregister_active_scan_listener(&rdev->wpan_phy, netdev, callback, arg );
 }
 
 #endif /* __CFG802154_RDEV_OPS */

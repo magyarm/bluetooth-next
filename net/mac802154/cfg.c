@@ -544,14 +544,18 @@ out:
 }
 
 static int
-ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
-		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
-		struct work_struct *work)
+ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy, struct net_device *netdev,
+		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg),
+		void *arg)
 {
 	int ret = 0;
-	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	struct ieee802154_sub_if_data *sdata;
+	struct ieee802154_local *local = wpan_phy_priv( wpan_phy );
+	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
+	sdata = IEEE802154_DEV_TO_SUB_IF( netdev );
+	sdata->local = local;
 	local->active_scan_callback = callback;
-	local->active_scan_work = work;
+	local->active_scan_work = arg;
 	ret = drv_start( local );
 	if( 0 != ret ) {
 		local->active_scan_callback = NULL;
@@ -561,7 +565,9 @@ ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
 }
 
 static int
-ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy )
+ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy, struct net_device *netdev,
+		void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg),
+		void *arg )
 {
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
