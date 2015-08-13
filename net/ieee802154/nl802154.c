@@ -1243,8 +1243,6 @@ static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 	struct device *dev;
 	void (*cnf)( struct work_struct * ) = NULL;
 
-	printk( KERN_INFO "Inside: %s", __FUNCTION__);
-
 	rdev = info->user_ptr[0];
 	dev = &rdev->wpan_phy.dev;
 
@@ -1349,7 +1347,7 @@ ieee802154_send_beacon_command_frame( struct net_device *netdev, u8 cmd_frame_id
 	src_addr.mode = IEEE802154_ADDR_NONE;
 	dst_addr.mode = IEEE802154_ADDR_SHORT;
 	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
-	dst_addr.short_addr = 0xBEEF;//IEEE802154_ADDR_BROADCAST;
+	dst_addr.short_addr = IEEE802154_ADDR_BROADCAST;
 
 	cb = mac_cb_init(skb);
 	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
@@ -1400,8 +1398,6 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	struct sk_buff *reply;
 	void *hdr;
 
-	printk( KERN_INFO "Inside: %s", __FUNCTION__);
-
 	wrk = container_of( to_delayed_work( work ), struct work802154, work );
 	skb = wrk->skb;
 	info = wrk->info;
@@ -1431,8 +1427,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 	}
 
 	if( scan_channels & BIT(current_channel) ) {
-//		dev_dbg( &netdev->dev, "Scanning channel #: %d\n", current_channel );
-		printk( KERN_INFO "Scanning channel #: %d\n", current_channel);
+		dev_dbg( &netdev->dev, "Scanning channel #: %d\n", current_channel );
 		status = rdev_set_channel(rdev, channel_page, current_channel);
 		//Send the beacon request
 		status = ieee802154_send_beacon_command_frame( netdev, IEEE802154_CMD_BEACON_REQ );
@@ -1501,8 +1496,6 @@ void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, cons
 
 	struct sk_buff *msg;
 	void *hdr;
-
-	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
 	wrk = container_of( to_delayed_work( (struct work_struct *)arg ), struct work802154, work );
 
@@ -1591,8 +1584,6 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 	struct device *dev;
 	struct net_device *netdev;
 	void (*cnf)( struct work_struct * ) = NULL;
-
-	printk( KERN_INFO "Inside: %s", __FUNCTION__);
 
 	rdev = info->user_ptr[0];
 	dev = &rdev->wpan_phy.dev;
@@ -1895,7 +1886,6 @@ free_wrk:
 
 out:
 	return r;
-
 }
 
 static int nl802154_assoc_rsp( struct sk_buff *skb, struct genl_info *info )
