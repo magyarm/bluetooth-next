@@ -393,7 +393,8 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
-	hlen = 40; //Todo: Replace magic number. comes from ieee std 802154, this value is the max header length.
+	hlen = 4 + 8 + 3; // Frame Control + Sequence Number + Extended Source Addr for Association Request
+	hlen += IEEE802154_ADDR_LONG == addr_mode ? 8 : 2; // Extended or Short Destination address
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
 
@@ -436,6 +437,8 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	cb->source = source_addr;
 	cb->dest = dst_addr;
+
+	//No security fields in yet.
 
 	dev_dbg( logdev, "DSN value in wpan_dev: %p\n", &wpan_dev->dsn);
 
