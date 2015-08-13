@@ -1425,7 +1425,7 @@ nl802154_assoc_send_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *w
 	memset( &source_addr, 0, sizeof( source_addr ) );
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
-	hlen = 1 + 2 + 1 + 8 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Association Request + Destination PAN ID
+	hlen = 2 + 2 + 1 + 8 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Association Request + Destination PAN ID
 	hlen += IEEE802154_ADDR_LONG == addr_mode ? 8 : 2; // Extended or Short Destination address
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
@@ -1513,7 +1513,7 @@ nl802154_assoc_send_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_d
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
-	hlen = 1 + 2 + 1 + 8 + 2 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Association Request + Source PAN ID + Dest PAN ID
+	hlen = 2 + 2 + 1 + 8 + 2 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Association Request + Source PAN ID + Dest PAN ID
 	hlen += IEEE802154_ADDR_LONG == addr_mode ? 8 : 2; // Extended or Short Destination address
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
