@@ -1325,24 +1325,25 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	int r;
 	struct cfg802154_registered_device *rdev;
 	struct wpan_dev *wpan_dev;
-	struct net_device *dev;
+	struct net_device *netdev;
 
 	struct sk_buff *reply;
 	void *hdr;
 
-	r = 0;
 	rdev = info->user_ptr[0];
-	dev = info->user_ptr[1];
-	wpan_dev = dev->ieee802154_ptr;
+	netdev = info->user_ptr[1];
+	wpan_dev = netdev->ieee802154_ptr;
+
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "set short addr failure (%d)\n", r );
+		dev_err( &netdev->dev, "set short addr failure (%d)\n", r );
 		goto out;
     }
-    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+
+	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
-        dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+        dev_err( &netdev->dev, "nlmsg_new failed (%d)\n", r );
         goto out;
     }
 
@@ -1356,7 +1357,7 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
         nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
         nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
     if ( 0 != r ) {
-        dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+        dev_err( &netdev->dev, "nla_put_failure (%d)\n", r );
         goto nla_put_failure;
     }
 
