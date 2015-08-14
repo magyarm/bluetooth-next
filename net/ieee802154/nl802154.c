@@ -14,7 +14,6 @@
  */
 
 #include <linux/rtnetlink.h>
-#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
