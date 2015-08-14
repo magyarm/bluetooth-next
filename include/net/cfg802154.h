@@ -99,9 +99,11 @@ struct cfg802154_ops {
 				struct wpan_dev *wpan_dev,
 				void (*callback)( struct sk_buff *, void *), void *arg);
 	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
-					void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct work_struct *active_scan_work),
-					struct work_struct *work );
-	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy );
+					void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+					void *arg );
+	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy,
+					void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+					void *arg );
 };
 
 static inline bool

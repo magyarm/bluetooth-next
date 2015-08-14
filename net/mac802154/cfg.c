@@ -572,11 +572,11 @@ ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	local->active_scan_callback = callback;
-	local->active_scan_work = work;
+	local->active_scan_arg = arg;
 	ret = drv_start( local );
 	if( 0 != ret ) {
 		local->active_scan_callback = NULL;
-		local->active_scan_work = NULL;
+		local->active_scan_arg = NULL;
 	}
 	return ret;
 }
@@ -589,7 +589,7 @@ ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy,
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	local->active_scan_callback = NULL;
-	local->active_scan_work = NULL;
+	local->active_scan_arg = NULL;
 	return ret;
 }
 
