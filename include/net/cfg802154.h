@@ -73,8 +73,20 @@ struct cfg802154_ops {
 	int	(*set_lbt_mode)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev, bool mode);
 	int	(*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-	            u8 page, u32 scan_channels, u8 *level, size_t nlevel,
+				u8 page, u32 scan_channels, u8 *level, size_t nlevel,
 				u8 duration );
+	int	(*register_beacon_listener)(struct wpan_phy *wpan_phy,
+				struct wpan_dev *wpan_dev,
+				void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *), void *arg);
+	void	(*deregister_beacon_listener)( struct wpan_phy *wpan_phy,
+				struct wpan_dev *wpan_dev,
+				void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *), void *arg);
+	int	(*register_assoc_req_listener)(struct wpan_phy *wpan_phy,
+				struct wpan_dev *wpan_dev,
+				void (*callback)( struct sk_buff *, void *), void *arg);
+	void	(*deregister_assoc_req_listener)( struct wpan_phy *wpan_phy,
+				struct wpan_dev *wpan_dev,
+				void (*callback)( struct sk_buff *, void *), void *arg);
 	int	(*disassoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 				u16 device_panid, u64 device_address,
 				u8 disassociate_reason, u8 tx_indirect);
@@ -84,12 +96,12 @@ struct cfg802154_ops {
 	void	(*deregister_disassoc_req_listener)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev,
 				void (*callback)( struct sk_buff *, void *), void *arg);
-	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy, struct net_device *netdev,
-				void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg),
-				void *arg );
-	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy, struct net_device *netdev,
-				void (*callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg),
-				void *arg );
+	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
+					void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+					void *arg );
+	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy,
+					void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+					void *arg );
 };
 
 static inline bool

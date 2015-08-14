@@ -90,9 +90,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	__le16 span, sshort;
 	int rc;
 
-	dev_err( &(wpan_dev->netdev->dev), "getting packet via slave interface %s\n", sdata->dev->name);
+	dev_dbg( &wpan_dev->netdev->dev, "getting packet via slave interface %s\n", sdata->dev->name);
 
-	dev_err( &(wpan_dev->netdev->dev), "Frame Type received (type = %d)\n", mac_cb(skb)->type);
+	dev_dbg( &wpan_dev->netdev->dev, "Frame Type received (type = %d)\n", mac_cb(skb)->type);
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -145,14 +145,26 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
-		dev_err( &(wpan_dev->netdev->dev), "Received Data Frame Control");
+		dev_dbg( &wpan_dev->netdev->dev, "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
-		if( sdata->local->active_scan_callback && sdata->local->active_scan_work ) {
-			dev_err( &(wpan_dev->netdev->dev), "Received Beacon Frame Control Active Scan");
-			return ieee802154_schedule_active_scan_callback_work(skb, hdr, sdata->local );
+		if( sdata->local->active_scan_callback && sdata->local->active_scan_arg ) {
+			sdata->local->active_scan_callback( skb, hdr, sdata->local->active_scan_arg );
+			return 0;
 		}
-		break;
+		if( sdata->local->beacon_ind_callback ) {
+			sdata->local->beacon_ind_callback( skb, hdr, sdata->local->beacon_ind_arg );
+			return 0;
+		}
+		goto fail;
+	case IEEE802154_FC_TYPE_MAC_CMD:
+		if( 0x2 == skb->data[0] ){
+			if ( sdata->local->assoc_req_callback ){
+				sdata->local->assoc_req_callback( skb, sdata->local->assoc_req_arg );
+				return 0;
+			}
+		}
+		goto fail;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
