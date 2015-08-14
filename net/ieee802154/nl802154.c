@@ -1696,11 +1696,15 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
+	netdev->netdev_ops->ndo_stop(netdev);
+
+	r = rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
 	if ( 0 != r ) {
 		dev_err( logdev, "rdev_set_pan_id failed (%d)\n", r );
 		goto free_wrk;
 	}
+
+	netdev->netdev_ops->ndo_open(netdev);
 
 	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
