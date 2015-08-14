@@ -1324,12 +1324,11 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 
 	r = 0;
 	rdev = info->user_ptr[0];
-	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
-	dev = (struct net_device *) wpan_dev->netdev;
-
+	dev = info->user_ptr[1];
+	wpan_dev = dev->ieee802154_ptr;
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+		dev_err( &dev->dev, "set short addr failure (%d)\n", r );
 		goto out;
     }
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
