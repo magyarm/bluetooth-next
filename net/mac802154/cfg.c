@@ -570,7 +570,8 @@ ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
 		void *arg)
 {
 	int ret = 0;
-	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	struct ieee802154_local *local = wpan_phy_priv( wpan_phy );
+
 	local->active_scan_callback = callback;
 	local->active_scan_arg = arg;
 	ret = drv_start( local );
