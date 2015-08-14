@@ -66,6 +66,14 @@ struct work802154 {
 	struct delayed_work work;
 };
 
+struct work_active_scan_receive {
+	struct sk_buff *skb;
+	const struct ieee802154_hdr *hdr;
+	void (*pan_descriptor_send_cb)( struct sk_buff *, const struct ieee802154_hdr *, void * );
+	void *active_scan_arg;
+	struct work_struct work;
+};
+
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info);
 
@@ -1377,12 +1385,21 @@ out:
 	return r;
 }
 
+static void nl802154_active_scan_receive_work( struct work_struct *work )
+{
+	struct work_active_scan_receive *wrk;
+
+	wrk = container_of( work, struct work_active_scan_receive, work );
+
+	wrk->pan_descriptor_send_cb( wrk->skb, wrk->hdr, (struct work_struct *)wrk->active_scan_arg );
+
+	kfree( wrk );
+	return;
+}
+
 void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, const struct ieee802154_hdr *receive_hdr, void *arg )
 {
-	struct work_struct *active_scan_work;
-
 	struct ieee802154_beacon_indication beacon_notify;
-	struct net *net;
 	struct nlattr *nl_pan_desc_entry;
 
 	struct cfg802154_registered_device *rdev;
@@ -1390,20 +1407,31 @@ void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, cons
 
 	struct work802154 *wrk;
 
-	active_scan_work = (struct work_struct *) arg;
+	struct sk_buff *msg;
+	void *hdr;
 
-	wrk = container_of( to_delayed_work( active_scan_work ), struct work802154, work );
+	wrk = container_of( to_delayed_work( (struct work_struct *)arg ), struct work802154, work );
 
 	rdev = wrk->info->user_ptr[0];
 	wpan_dev = (struct wpan_dev *)&rdev->wpan_phy.dev;
 
-	beacon_notify.pan_desc.src_addr_mode   = receive_hdr->fc.source_addr_mode;
+	beacon_notify.pan_desc.src_addr_mode = receive_hdr->fc.source_addr_mode;
 
 	if ( IEEE802154_ADDR_LONG == beacon_notify.pan_desc.src_addr_mode ) {
 		beacon_notify.pan_desc.src_addr = mac_cb(receive_skb)->source.extended_addr;
 	}
 	else if ( IEEE802154_ADDR_SHORT == beacon_notify.pan_desc.src_addr_mode ) {
 		beacon_notify.pan_desc.src_addr = mac_cb(receive_skb)->source.short_addr;
+	}
+
+	msg = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == msg ) {
+		goto out;
+	}
+
+	hdr = nl802154hdr_put( msg, wrk->info->snd_portid, wrk->info->snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
+	if ( NULL == hdr ) {
+		goto free_reply;
 	}
 
 	/* The Source PAN Identifier and Source Address fields contain the PAN identifier and address,
@@ -1422,40 +1450,56 @@ void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, cons
 	beacon_notify.pan_desc.key_src         = 0;
 	beacon_notify.pan_desc.key_index       = receive_hdr->sec.key_id;
 
-	nl_pan_desc_entry = nla_nest_start( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESCRIPTOR );
-	if (nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify.pan_desc.src_addr_mode ) ||
-			nla_put_u16( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify.pan_desc.src_pan_id) ||
-			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify.pan_desc.src_addr) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify.pan_desc.channel_num) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify.pan_desc.channel_page) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify.pan_desc.superframe_spec) ||
-			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify.pan_desc.gts_permit) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_LQI, beacon_notify.pan_desc.lqi) ||
-			nla_put_u32( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify.pan_desc.time_stamp) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify.pan_desc.sec_status) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify.pan_desc.sec_level) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify.pan_desc.key_id_mode) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify.pan_desc.key_src) ||
-			nla_put_u8 ( wrk->cmd_stuff.active_scan.reply, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify.pan_desc.key_index)) {
+
+	nl_pan_desc_entry = nla_nest_start( msg, NL802154_ATTR_PAN_DESCRIPTOR );
+	if ( nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify.pan_desc.src_addr_mode ) ||
+			nla_put_u16( msg, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify.pan_desc.src_pan_id) ||
+			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify.pan_desc.src_addr) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify.pan_desc.channel_num) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify.pan_desc.channel_page) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify.pan_desc.superframe_spec) ||
+			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify.pan_desc.gts_permit) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_LQI, beacon_notify.pan_desc.lqi) ||
+			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify.pan_desc.time_stamp) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify.pan_desc.sec_status) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify.pan_desc.sec_level) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify.pan_desc.key_id_mode) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify.pan_desc.key_src) ||
+			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify.pan_desc.key_index)) {
 		wrk->cmd_stuff.active_scan.status = -ENOBUFS;
 		goto free_reply;
 	}
-	nla_nest_end( wrk->cmd_stuff.active_scan.reply, nl_pan_desc_entry );
-
-	net = genl_info_net(wrk->info);
-
-	wrk->cmd_stuff.active_scan.status = genlmsg_reply( wrk->cmd_stuff.active_scan.reply, wrk->info);
+	nla_nest_end( msg, nl_pan_desc_entry );
 
 	wrk->cmd_stuff.active_scan.result_list_size++;
 
+	genlmsg_end( msg, hdr );
+
+	genlmsg_reply( msg, wrk->info );
 	goto out;
 
 free_reply:
-	nlmsg_free( wrk->cmd_stuff.active_scan.reply );
+	nlmsg_free( msg );
 out:
 	return;
 }
 
+void nl802154_active_scan_callback( struct sk_buff *receive_skb, const struct ieee802154_hdr *receive_hdr, void *arg )
+{
+	struct work_active_scan_receive *wrk;
+
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+
+	wrk->skb = receive_skb;
+	wrk->hdr = receive_hdr;
+	wrk->pan_descriptor_send_cb = nl802154_active_scan_pan_descriptor_send;
+	wrk->active_scan_arg = arg;
+	INIT_WORK( &wrk->work, nl802154_active_scan_receive_work );
+
+	schedule_work( &wrk->work );
+
+	return;
+}
 
 static void nl802154_active_scan_cnf( struct work_struct *work )
 {
@@ -1552,96 +1596,9 @@ free_reply:
 nla_put_failure:
 	nlmsg_free( reply );
 complete:
-	rdev_deregister_active_scan_listener(rdev, nl802154_active_scan_pan_descriptor_send, &wrk->work.work );
+	rdev_deregister_active_scan_listener(rdev, nl802154_active_scan_callback, &wrk->work.work );
 	complete( &wrk->completion );
 	kfree( wrk );
-out:
-	return;
-}
-
-void nl802154_active_scan_pan_descriptor_send( struct sk_buff *receive_skb, const struct ieee802154_hdr *receive_hdr, void *arg )
-{
-	struct ieee802154_beacon_indication beacon_notify;
-	struct nlattr *nl_pan_desc_entry;
-
-	struct cfg802154_registered_device *rdev;
-	struct wpan_dev *wpan_dev;
-
-	struct work802154 *wrk;
-
-	struct sk_buff *msg;
-	void *hdr;
-
-	wrk = container_of( to_delayed_work( (struct work_struct *)arg ), struct work802154, work );
-
-	rdev = wrk->info->user_ptr[0];
-	wpan_dev = (struct wpan_dev *)&rdev->wpan_phy.dev;
-
-	beacon_notify.pan_desc.src_addr_mode = receive_hdr->fc.source_addr_mode;
-
-	if ( IEEE802154_ADDR_LONG == beacon_notify.pan_desc.src_addr_mode ) {
-		beacon_notify.pan_desc.src_addr = mac_cb(receive_skb)->source.extended_addr;
-	}
-	else if ( IEEE802154_ADDR_SHORT == beacon_notify.pan_desc.src_addr_mode ) {
-		beacon_notify.pan_desc.src_addr = mac_cb(receive_skb)->source.short_addr;
-	}
-
-	msg = genlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-	if ( NULL == msg ) {
-		goto out;
-	}
-
-	hdr = nl802154hdr_put( msg, wrk->info->snd_portid, wrk->info->snd_seq, 0, NL802154_CMD_BEACON_NOTIFY_IND );
-	if ( NULL == hdr ) {
-		goto free_reply;
-	}
-
-	/* The Source PAN Identifier and Source Address fields contain the PAN identifier and address,
-	 * respectively, of the device transmitting the beacon. */
-	beacon_notify.pan_desc.src_addr        = mac_cb(receive_skb)->source.short_addr;
-	beacon_notify.pan_desc.src_pan_id      = mac_cb(receive_skb)->source.pan_id;
-	beacon_notify.pan_desc.channel_num     = wpan_dev->wpan_phy->current_channel;
-	beacon_notify.pan_desc.channel_page    = wpan_dev->wpan_phy->current_channel;
-	beacon_notify.pan_desc.superframe_spec = 0;
-	beacon_notify.pan_desc.gts_permit      = 0;
-	beacon_notify.pan_desc.lqi             = mac_cb(receive_skb)->lqi;
-	beacon_notify.pan_desc.time_stamp      = 0;
-	beacon_notify.pan_desc.sec_status      = 0;
-	beacon_notify.pan_desc.sec_level       = mac_cb(receive_skb)->seclevel;
-	beacon_notify.pan_desc.key_id_mode     = receive_hdr->sec.key_id_mode;
-	beacon_notify.pan_desc.key_src         = 0;
-	beacon_notify.pan_desc.key_index       = receive_hdr->sec.key_id;
-
-
-	nl_pan_desc_entry = nla_nest_start( msg, NL802154_ATTR_PAN_DESCRIPTOR );
-	if (nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR_MODE, beacon_notify.pan_desc.src_addr_mode ) ||
-			nla_put_u16( msg, NL802154_ATTR_PAN_DESC_SRC_PAN_ID, beacon_notify.pan_desc.src_pan_id) ||
-			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_SRC_ADDR, beacon_notify.pan_desc.src_addr) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_NUM, beacon_notify.pan_desc.channel_num) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_CHANNEL_PAGE, beacon_notify.pan_desc.channel_page) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SUPERFRAME_SPEC, beacon_notify.pan_desc.superframe_spec) ||
-			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_GTS_PERMIT, beacon_notify.pan_desc.gts_permit) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_LQI, beacon_notify.pan_desc.lqi) ||
-			nla_put_u32( msg, NL802154_ATTR_PAN_DESC_TIME_STAMP, beacon_notify.pan_desc.time_stamp) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_STATUS, beacon_notify.pan_desc.sec_status) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_SEC_LEVEL, beacon_notify.pan_desc.sec_level) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_ID_MODE, beacon_notify.pan_desc.key_id_mode) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_SRC, beacon_notify.pan_desc.key_src) ||
-			nla_put_u8 ( msg, NL802154_ATTR_PAN_DESC_KEY_INDEX, beacon_notify.pan_desc.key_index)) {
-		wrk->cmd_stuff.active_scan.status = -ENOBUFS;
-		goto free_reply;
-	}
-	nla_nest_end( msg, nl_pan_desc_entry );
-
-	wrk->cmd_stuff.active_scan.result_list_size++;
-
-	genlmsg_end( msg, hdr );
-
-	genlmsg_reply( msg, wrk->info );
-	goto out;
-
-free_reply:
-	nlmsg_free( msg );
 out:
 	return;
 }
@@ -1721,7 +1678,7 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 	INIT_DELAYED_WORK( &wrk->work, cnf );
 
 	if( IEEE802154_MAC_SCAN_ACTIVE == scan_type ) {
-		r = rdev_active_scan_register_listener(rdev, netdev, nl802154_active_scan_pan_descriptor_send, (void*)&wrk->work.work );
+		r = rdev_register_active_scan_listener(rdev, nl802154_active_scan_callback, (void*)&wrk->work.work );
 	}
 
 	init_completion( &wrk->completion );

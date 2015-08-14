@@ -570,12 +570,8 @@ ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
 		void *arg)
 {
 	int ret = 0;
-	struct ieee802154_sub_if_data *sdata;
 	struct ieee802154_local *local = wpan_phy_priv( wpan_phy );
-	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
-	//Otherwise the command frame won't be sent out
-	sdata = IEEE802154_DEV_TO_SUB_IF( netdev );
-	sdata->local = local;
+
 	local->active_scan_callback = callback;
 	local->active_scan_arg = arg;
 	ret = drv_start( local );

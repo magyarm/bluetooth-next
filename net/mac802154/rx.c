@@ -29,14 +29,6 @@
 
 #include "ieee802154_i.h"
 
-struct work_active_scan_receive {
-	struct sk_buff *skb;
-	const struct ieee802154_hdr *hdr;
-	void (*active_scan_callback)( struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg );
-	void *active_scan_work;
-	struct work_struct work;
-};
-
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -45,41 +37,6 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	pr_debug("received beacon packet via interface %s\n", skb->dev->name);
 
 	return netif_receive_skb(skb);
-}
-
-static void rx_active_scan_receive_work( struct work_struct *work )
-{
-	struct work_active_scan_receive *wrk;
-
-	wrk = container_of( work, struct work_active_scan_receive, work );
-
-	wrk->active_scan_callback( wrk->skb, wrk->hdr, (struct wrk_struct *)wrk->active_scan_work );
-
-	kfree( wrk );
-	return;
-}
-
-static int ieee802154_schedule_active_scan_callback_work(struct sk_buff *skb, const struct ieee802154_hdr *hdr, const struct ieee802154_local *local)
-{
-   int ret = 0;
-   struct work_active_scan_receive *wrk;
-
-   wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
-   if ( NULL == wrk ) {
-      ret = -ENOMEM;
-      goto out;
-   }
-
-   wrk->skb = skb;
-   wrk->hdr = hdr;
-   wrk->active_scan_callback = local->active_scan_callback;
-   wrk->active_scan_work = local->active_scan_work;
-   INIT_WORK( &wrk->work, rx_active_scan_receive_work );
-
-   ret = schedule_work( &wrk->work );
-
-out:
-   return ret;
 }
 
 static int
