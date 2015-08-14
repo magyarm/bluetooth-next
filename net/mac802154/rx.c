@@ -110,9 +110,19 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		}
 		goto fail;
 	case IEEE802154_FC_TYPE_MAC_CMD:
-		if( 0x2 == skb->data[0] ){
-			if ( sdata->local->assoc_req_callback ){
+		if( IEEE802154_CMD_ASSOCIATION_RESP == skb->data[0] ) {
+			if ( sdata->local->assoc_req_callback ) {
+				// possibly also send the header. The coord address / pan id should match up with the
+				// coord address / pand id from the request
 				sdata->local->assoc_req_callback( skb, sdata->local->assoc_req_arg );
+				return 0;
+			}
+		}
+		if( IEEE802154_CMD_DISASSOCIATION_NOTIFY == skb->data[0] ) {
+			if ( sdata->local->disassoc_req_callback ) {
+				// possibly also send the header. The coord address / pan id should match up with the
+				// coord address / pand id from the request
+				sdata->local->disassoc_req_callback( skb, sdata->local->disassoc_req_arg );
 				return 0;
 			}
 		}

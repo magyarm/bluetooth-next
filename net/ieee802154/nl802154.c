@@ -1721,7 +1721,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	// XXX: <BEGIN SNIP>
-	// XXX: FIXME: This needs to be handled in the completion function via state machine, not here
+	// XXX: FIXME: This needs to be handled in the callback function via state machine, not here
 	msleep(50);
 
 	// XXX: define this function statically in this file.
@@ -1731,7 +1731,6 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		dev_err( logdev, "ack assoc_req failed (%d)\n", r );
 		goto dereg_listener;
 	}
-
 	// XXX: <END SNIP>
 
 	init_completion( &wrk->completion );
@@ -2037,6 +2036,110 @@ out:
 	return;
 }
 
+
+static int
+nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+						u16 device_panid, u64 device_address,
+						u8 disassociate_reason, u8 tx_indirect)
+{
+	int r;
+
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, src_addr;
+	unsigned char *data;
+
+	struct net_device *netdev = wpan_dev->netdev;
+	struct device *logdev = &netdev->dev;
+
+	memset( &src_addr, 0, sizeof( src_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
+
+	//Create beacon frame / payload
+	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	dev_dbg( logdev, "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	dev_dbg( logdev, "Address of the netdev device structure: %p\n", wpan_dev->netdev );
+	// dev_dbg( logdev, "Address of ieee802154_local * local from wpan_phy_priv: %p\n", local );
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		r = -ENOMEM;
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	src_addr.mode = wpan_dev->addr_mode;
+	src_addr.pan_id = wpan_dev->pan_id;
+	if ( IEEE802154_ADDR_LONG == src_addr.mode ) {
+		src_addr.extended_addr = wpan_dev->extended_addr;
+	} else {
+		src_addr.short_addr = wpan_dev->short_addr;
+	}
+
+	dst_addr.mode = wpan_dev->coord_addr_mode;
+	dst_addr.pan_id = wpan_dev->pan_id;
+	if ( IEEE802154_ADDR_SHORT == dst_addr.mode ){
+		dst_addr.short_addr = wpan_dev->coord_short_addr;
+	} else {
+		dst_addr.extended_addr = wpan_dev->coord_extended_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = true;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = src_addr;
+	cb->dest = dst_addr;
+
+	dev_dbg( logdev, "DSN value in wpan_dev: %p\n", &wpan_dev->dsn);
+
+	dev_dbg( logdev, "Dest addr: 0x%04x\n", dst_addr.short_addr );
+	dev_dbg( logdev, "Dest addr long: 0x%016" PRIx64 "\n", dst_addr.extended_addr );
+	dev_dbg( logdev, "Src addr: 0x%04x\n", src_addr.short_addr );
+	dev_dbg( logdev, "Src addr long: 0x%016" PRIx64 "\n", src_addr.extended_addr );
+
+	netdev->header_ops->create( skb, netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+
+	dev_dbg( logdev, "Header is created");
+
+	//Add the mac header to the data
+	memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_DISASSOCIATION_NOTIFY;
+	data[1] = disassociate_reason;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	dev_dbg( logdev, "Data bytes sent out %x, %x\n",data[0], data[1]);
+
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	dev_dbg( logdev, "r value is %x\n", r );
+	if( 0 == r) {
+		goto error;
+	}
+
+	r = 0;
+	goto out;
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
+}
+
 static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
 	struct work_struct *work = (struct work_struct *)arg;
@@ -2168,7 +2271,7 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	r = rdev_disassoc_req( rdev, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
+	r = nl802154_send_disassoc_req( &rdev->wpan_phy, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "rdev_disassoc_req failed (%d)\n", r );
 		goto dereg_listener;

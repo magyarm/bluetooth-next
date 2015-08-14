@@ -274,34 +274,20 @@ rdev_deregister_assoc_req_listener( struct cfg802154_registered_device *rdev,
 }
 
 static inline int
-rdev_disassoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-				u16 device_panid, u64 device_address, u8 disassociate_reason,
-				u8 tx_indirect )
-{
-	int ret;
-
-//	trace_802154_rdev_disassoc_req(&rdev->wpan_phy, wpan_dev);
-	ret = rdev->ops->disassoc_req(&rdev->wpan_phy, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect);
-//	trace_802154_rdev_disassoc_req(&rdev->wpan_phy);
-	return ret;
-}
-
-static inline int
 rdev_register_disassoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
 								void (*callback)( struct sk_buff *, void *), void *arg )
 {
 	int ret = 0;
-
-	// XXX: implement me
-
+	ret = rdev->ops->register_disassoc_req_listener(&rdev->wpan_phy, wpan_dev, callback, arg);
 	return ret;
 }
 
 static inline void
-rdev_deregister_disassoc_req_listener(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-								void (*callback)( struct sk_buff *, void *), void *arg )
+rdev_deregister_disassoc_req_listener( struct cfg802154_registered_device *rdev,
+		struct wpan_dev *wpan_dev,
+		void (*callback)(struct sk_buff *skb, void *arg), void *arg)
 {
-	// XXX: implement me
+	rdev->ops->deregister_disassoc_req_listener( &rdev->wpan_phy, wpan_dev, callback, arg );
 }
 
 static inline int

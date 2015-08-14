@@ -87,9 +87,6 @@ struct cfg802154_ops {
 	void	(*deregister_assoc_req_listener)( struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev,
 				void (*callback)( struct sk_buff *, void *), void *arg);
-	int	(*disassoc_req)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
-				u16 device_panid, u64 device_address,
-				u8 disassociate_reason, u8 tx_indirect);
 	int	(*register_disassoc_req_listener)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev,
 				void (*callback)( struct sk_buff *, void *), void *arg);
