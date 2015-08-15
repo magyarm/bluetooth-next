@@ -548,6 +548,8 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_lbt_mode, SET_LBT_MODE);
 	CMD(ed_scan, ED_SCAN_REQ);
 
+	CMD(ed_scan, DISASSOC_REQ); // XXX: FIXME
+
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
 
