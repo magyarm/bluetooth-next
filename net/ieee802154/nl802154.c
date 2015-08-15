@@ -1326,11 +1326,18 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	rdev = info->user_ptr[0];
 	dev = info->user_ptr[1];
 	wpan_dev = dev->ieee802154_ptr;
+
+	dev->netdev_ops->ndo_open(dev);
+	dev->netdev_ops->ndo_stop(dev);
+
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "set short addr failure (%d)\n", r );
 		goto out;
     }
+
+	dev->netdev_ops->ndo_open(dev);
+
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
