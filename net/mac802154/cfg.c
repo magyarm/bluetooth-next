@@ -15,6 +15,7 @@
 
 #include <net/rtnetlink.h>
 #include <net/cfg802154.h>
+#include <net/ieee802154_netdev.h>
 
 #include "ieee802154_i.h"
 #include "driver-ops.h"
@@ -530,7 +531,6 @@ ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	dev_dbg( logdev, "Src addr: 0x%04x\n", src_addr.short_addr );
 	dev_dbg( logdev, "Src addr long: 0x%016" PRIx64 "\n", src_addr.extended_addr );
 
-	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
 	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
 	if ( 0 != r ) {
 		dev_err( &wpan_dev->netdev->dev, "ieee802154_header_create failed (%d)\n", r );
@@ -657,12 +657,12 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
 	.register_active_scan_listener = ieee802154_register_active_scan_listener,
-	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
-	.register_beacon_listener = ieee802154_register_beacon_listener,
 	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
 	.register_assoc_req_listener = ieee802154_register_assoc_req_listener,
 	.deregister_assoc_req_listener = ieee802154_deregister_assoc_req_listener,
 	.disassoc_req = ieee802154_disassoc_req,
 	.register_disassoc_req_listener = ieee802154_register_disassoc_req_listener,
 	.deregister_disassoc_req_listener = ieee802154_deregister_disassoc_req_listener,
+	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
+	.register_beacon_listener = ieee802154_register_beacon_listener,
 };

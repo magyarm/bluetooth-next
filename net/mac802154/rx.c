@@ -47,9 +47,15 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	__le16 span, sshort;
 	int rc;
 
+<<<<<<< HEAD
 	dev_dbg( &wpan_dev->netdev->dev, "getting packet via slave interface %s\n", sdata->dev->name);
 
 	dev_dbg( &wpan_dev->netdev->dev, "Frame Type received (type = %d)\n", mac_cb(skb)->type);
+=======
+	dev_err( &(wpan_dev->netdev->dev), "getting packet via slave interface %s\n", sdata->dev->name);
+
+	printk( KERN_INFO "Frame Type received (type = %d)\n", mac_cb(skb)->type);
+>>>>>>> master-next
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -105,10 +111,13 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		dev_dbg( &wpan_dev->netdev->dev, "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
+<<<<<<< HEAD
 		if( sdata->local->active_scan_callback && sdata->local->active_scan_arg ) {
 			sdata->local->active_scan_callback( skb, hdr, sdata->local->active_scan_arg );
 			return 0;
 		}
+=======
+>>>>>>> master-next
 		if( sdata->local->beacon_ind_callback ) {
 			sdata->local->beacon_ind_callback( skb, hdr, sdata->local->beacon_ind_arg );
 			return 0;

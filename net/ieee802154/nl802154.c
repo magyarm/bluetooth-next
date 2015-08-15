@@ -20,6 +20,7 @@
 #include <net/mac802154.h>
 #include <net/netlink.h>
 #include <net/nl802154.h>
+#include <net/ieee802154_netdev.h>
 #include <net/sock.h>
 #include <net/ieee802154_netdev.h>
 
@@ -1722,6 +1723,7 @@ enum {
 static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status )
 {
 	int r;
+
 	struct cfg802154_registered_device *rdev;
 	struct wpan_dev *wpan_dev;
 	struct net_device *dev;
@@ -1738,38 +1740,39 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
 		goto out;
-    }
-    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
-    if ( NULL == reply ) {
-        r = -ENOMEM;
-        dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
-        goto out;
-    }
+	}
 
-    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ASSOC_CNF );
-    if ( NULL == hdr ) {
-        r = -ENOBUFS;
-        goto free_reply;
-    }
+	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == reply ) {
+		r = -ENOMEM;
+		dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+		goto out;
+	}
 
-    r =
-        nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
-        nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
-    if ( 0 != r ) {
-        dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
-        goto nla_put_failure;
-    }
+	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ASSOC_CNF );
+	if ( NULL == hdr ) {
+		r = -ENOBUFS;
+		goto free_reply;
+	}
 
-    genlmsg_end( reply, hdr );
+	r =
+		nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
+		nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
+	if ( 0 != r ) {
+		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+		goto nla_put_failure;
+	}
 
-    r = genlmsg_reply( reply, info );
-    goto out;
+	genlmsg_end( reply, hdr );
+
+	r = genlmsg_reply( reply, info );
+	goto out;
 
 nla_put_failure:
 free_reply:
-    nlmsg_free( reply );
+	nlmsg_free( reply );
 out:
-    return;
+	return;
 }
 
 static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
@@ -2101,6 +2104,12 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	r = rdev_set_channel(rdev, channel_page, channel_number);
 	if ( 0 != r ) {
 		dev_err( logdev, "rdev_set_channel failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
+	if ( 0 != r ) {
+		dev_err( logdev, "rdev_set_pan_id failed (%d)\n", r );
 		goto free_wrk;
 	}
 

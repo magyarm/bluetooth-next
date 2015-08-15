@@ -2,6 +2,7 @@
 #define __CFG802154_RDEV_OPS
 
 #include <net/cfg802154.h>
+#include <net/ieee802154_netdev.h>
 
 #include "core.h"
 #include "trace.h"
