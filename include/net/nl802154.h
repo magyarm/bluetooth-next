@@ -67,6 +67,9 @@ enum nl802154_commands {
 	NL802154_CMD_DISASSOC_IND,
 	NL802154_CMD_DISASSOC_CNF,
 
+	NL802154_CMD_ACTIVE_SCAN_REQ,
+	NL802154_CMD_ACTIVE_SCAN_CNF,
+
 	/* add new commands above here */
 
 	/* used to define NL802154_CMD_MAX below */
@@ -337,9 +340,5 @@ struct ieee802154_beacon_indication {
 	u32 sdu_len;                   /* integer    : 0 -- aMaxBeaconPayloadLength */
 	u8 sdu[127];                   /* byte array :                              */
 };
-
-struct genl_info;
-
-int cfg802154_inform_beacon( struct ieee802154_beacon_indication *beacon_notify, struct genl_info *info );
 
 #endif /* __NL802154_H */

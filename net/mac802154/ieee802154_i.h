@@ -57,6 +57,7 @@ struct ieee802154_local {
 
 	bool started;
 	bool suspended;
+	struct genl_info *beacon_listener;
 
 	struct tasklet_struct tasklet;
 	struct sk_buff_head skb_queue;
@@ -72,6 +73,9 @@ struct ieee802154_local {
 
 	void (*assoc_req_callback)(struct sk_buff *, void *);
 	void *assoc_req_arg;
+
+	void (*active_scan_callback)( struct sk_buff *, const struct ieee802154_hdr *, void *);
+	void *active_scan_arg;
 };
 
 enum {

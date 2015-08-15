@@ -458,6 +458,143 @@ out:
 }
 
 static int
+ieee802154_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+						u16 device_panid, u64 device_address,
+						u8 disassociate_reason, u8 tx_indirect)
+{
+	int r;
+
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, src_addr;
+	unsigned char *data;
+
+	struct net_device *netdev = wpan_dev->netdev;
+	struct device *logdev = &netdev->dev;
+
+	memset( &src_addr, 0, sizeof( src_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
+
+	//Create beacon frame / payload
+	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	dev_dbg( logdev, "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	dev_dbg( logdev, "Address of the netdev device structure: %p\n", wpan_dev->netdev );
+	// dev_dbg( logdev, "Address of ieee802154_local * local from wpan_phy_priv: %p\n", local );
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		r = -ENOMEM;
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	src_addr.mode = wpan_dev->addr_mode;
+	src_addr.pan_id = wpan_dev->pan_id;
+	if ( IEEE802154_ADDR_LONG == src_addr.mode ) {
+		src_addr.short_addr = wpan_dev->short_addr;
+	} else {
+		src_addr.extended_addr = wpan_dev->extended_addr;
+	}
+
+	dst_addr.mode = wpan_dev->coord_addr_mode;
+	dst_addr.pan_id = wpan_dev->pan_id;
+	if ( IEEE802154_ADDR_SHORT == dst_addr.mode ){
+		dst_addr.short_addr = wpan_dev->coord_short_addr;
+	} else {
+		dst_addr.extended_addr = wpan_dev->coord_extended_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = true;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = src_addr;
+	cb->dest = dst_addr;
+
+	dev_dbg( logdev, "DSN value in wpan_dev: %p\n", &wpan_dev->dsn);
+
+	dev_dbg( logdev, "Dest addr: 0x%04x\n", dst_addr.short_addr );
+	dev_dbg( logdev, "Dest addr long: 0x%016" PRIx64 "\n", dst_addr.extended_addr );
+	dev_dbg( logdev, "Src addr: 0x%04x\n", src_addr.short_addr );
+	dev_dbg( logdev, "Src addr long: 0x%016" PRIx64 "\n", src_addr.extended_addr );
+
+	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+	if ( 0 != r ) {
+		dev_err( &wpan_dev->netdev->dev, "ieee802154_header_create failed (%d)\n", r );
+		goto error;
+	}
+
+	dev_dbg( logdev, "Header is created");
+
+	//Add the mac header to the data
+	memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_DISASSOCIATION_NOTIFY;
+	data[1] = disassociate_reason;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	dev_dbg( logdev, "Data bytes sent out %x, %x\n",data[0], data[1]);
+
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	dev_dbg( logdev, "r value is %x\n", r );
+	if( 0 == r) {
+		goto error;
+	}
+
+	r = 0;
+	goto out;
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
+}
+
+static int
+ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
+		void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+		void *arg)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv( wpan_phy );
+
+	local->active_scan_callback = callback;
+	local->active_scan_arg = arg;
+	ret = drv_start( local );
+	if( 0 != ret ) {
+		local->active_scan_callback = NULL;
+		local->active_scan_arg = NULL;
+	}
+	return ret;
+}
+
+static int
+ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy,
+		void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+		void *arg)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->active_scan_callback = NULL;
+	local->active_scan_arg = NULL;
+	return ret;
+}
+
+static int
 ieee802154_register_assoc_req_listener( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, void (*callback)(struct sk_buff *, void *), void *arg )
 {
 	int r;
@@ -519,10 +656,12 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
-	.register_beacon_listener = ieee802154_register_beacon_listener,
+	.register_active_scan_listener = ieee802154_register_active_scan_listener,
 	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
 	.register_assoc_req_listener = ieee802154_register_assoc_req_listener,
 	.deregister_assoc_req_listener = ieee802154_deregister_assoc_req_listener,
 	.register_disassoc_req_listener = ieee802154_register_disassoc_req_listener,
 	.deregister_disassoc_req_listener = ieee802154_deregister_disassoc_req_listener,
+	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
+	.register_beacon_listener = ieee802154_register_beacon_listener,
 };

@@ -93,6 +93,12 @@ struct cfg802154_ops {
 	void	(*deregister_disassoc_req_listener)(struct wpan_phy *wpan_phy,
 				struct wpan_dev *wpan_dev,
 				void (*callback)( struct sk_buff *, void *), void *arg);
+	int	(*register_active_scan_listener)( struct wpan_phy *wpan_phy,
+					void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+					void *arg );
+	int	(*deregister_active_scan_listener)( struct wpan_phy *wpan_phy,
+					void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+					void *arg );
 };
 
 static inline bool

@@ -291,9 +291,25 @@ rdev_deregister_disassoc_req_listener( struct cfg802154_registered_device *rdev,
 }
 
 static inline int
+rdev_register_active_scan_listener(struct cfg802154_registered_device *rdev,
+		void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+		void *arg )
+{
+	return rdev->ops->register_active_scan_listener(&rdev->wpan_phy, callback, arg );
+}
+
+static inline void
+rdev_deregister_active_scan_listener(struct cfg802154_registered_device *rdev,
+		void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+		void *arg )
+{
+	rdev->ops->deregister_active_scan_listener(&rdev->wpan_phy, callback, arg);
+}
+
+static inline int
 rdev_register_beacon_listener(struct cfg802154_registered_device *rdev,
-                              struct wpan_dev *wpan_dev,
-                              void (*callback)(struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg), void *arg)
+		struct wpan_dev *wpan_dev,
+		void (*callback)(struct sk_buff *, const struct ieee802154_hdr *, void *), void *arg)
 {
 	int ret = 0;
 
@@ -304,9 +320,10 @@ rdev_register_beacon_listener(struct cfg802154_registered_device *rdev,
 
 static inline void
 rdev_deregister_beacon_listener(struct cfg802154_registered_device *rdev,
-                                struct wpan_dev *wpan_dev,
-                                void (*callback)(struct sk_buff *skb, const struct ieee802154_hdr *hdr, void *arg), void *arg)
+		struct wpan_dev *wpan_dev,
+		void (*callback)(struct sk_buff *, const struct ieee802154_hdr *, void *), void *arg)
 {
 	rdev->ops->deregister_beacon_listener( &rdev->wpan_phy, wpan_dev, callback, arg );
 }
+
 #endif /* __CFG802154_RDEV_OPS */
