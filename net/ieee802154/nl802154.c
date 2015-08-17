@@ -1551,7 +1551,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		//Send the beacon request
 		status = ieee802154_send_beacon_command_frame( netdev, IEEE802154_CMD_BEACON_REQ );
 		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
-		status = schedule_delayed_work( &wrk->work, msecs_to_jiffies( scan_duration*10000 ) ) ? 0 : -EALREADY;
+		status = schedule_delayed_work( &wrk->work, msecs_to_jiffies( a_base_superframe_duration * symbol_duration_us *( ( 1 << scan_duration)  + 1 ) * 1000 ) ) ? 0 : -EALREADY;
 		if( 0 == status ) {
 			goto out;
 		}
