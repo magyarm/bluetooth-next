@@ -2127,6 +2127,33 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
+	r = rdev_set_coord_addr_mode(rdev, wpan_dev, coord_addr_mode );
+	if ( 0 != r ) {
+		dev_err( logdev, "rdev_set_coord_addr_mode failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	switch( coord_addr_mode ) {
+	case IEEE802154_ADDR_SHORT:
+		r = rdev_set_coord_short_addr(rdev, wpan_dev, (__le16)coord_address );
+		if ( 0 != r ) {
+			dev_err( logdev, "rdev_set_coord_short_addr failed (%d)\n", r );
+			goto free_wrk;
+		}
+		break;
+	case IEEE802154_ADDR_LONG:
+		r = rdev_set_coord_extended_addr(rdev, wpan_dev, (__le64)coord_address );
+		if ( 0 != r ) {
+			dev_err( logdev, "rdev_set_coord_extended_addr failed (%d)\n", r );
+			goto free_wrk;
+		}
+		break;
+	default:
+		dev_err( logdev, "invalid address / mode combination\n" );
+		r = -EINVAL;
+		goto out;
+	}
+
 	r = netdev->netdev_ops->ndo_stop(netdev);
 	if ( 0 != r ) {
 		dev_warn( logdev, "ndo_stop failed (%d)\n", r );
