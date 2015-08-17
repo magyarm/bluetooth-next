@@ -2714,6 +2714,13 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	wrk->cmd_stuff.disassoc.device_panid = device_panid;
 	wrk->cmd_stuff.disassoc.device_address = device_address;
 
+#if 0
+	// XXX: ATUSB hardware does not propogate ACK packets up via USB.
+	// XXX: This may be something correctable just via setting ATRF registers
+	// XXX: but it might require modifying the ATMega firmware.
+	// XXX: What is kind of short-sighted about this design, is that the hardware
+	// XXX: does not report when an ACK is _not_ received to the host...
+
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_disassoc_req_timeout );
 
@@ -2736,6 +2743,17 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	wait_for_completion( &wrk->completion );
+#else
+
+	r = nl802154_send_disassoc_req( &rdev->wpan_phy, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
+	if ( 0 != r ) {
+		dev_err( logdev, "rdev_disassoc_req failed (%d)\n", r );
+		goto dereg_listener;
+	}
+
+	nl802154_disassoc_cnf( skb, info, IEEE802154_SUCCESS, device_panid, device_address );
+
+#endif
 
 	r = 0;
 	goto out;
