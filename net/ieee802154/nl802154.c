@@ -1726,47 +1726,75 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 
 	struct cfg802154_registered_device *rdev;
 	struct wpan_dev *wpan_dev;
-	struct net_device *dev;
+	struct net_device *netdev;
+	struct device *logdev;
 
 	struct sk_buff *reply;
 	void *hdr;
 
-	r = 0;
 	rdev = info->user_ptr[0];
-	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
-	dev = (struct net_device *) wpan_dev->netdev;
+	netdev = info->user_ptr[1];
+	wpan_dev = netdev->ieee802154_ptr;
+	logdev = &netdev->dev;
+
+	if ( ! ( netdev->netdev_ops->ndo_open && netdev->netdev_ops->ndo_stop ) ) {
+		r = -ENOSYS;
+		dev_err( logdev, "missing at least 1 of required ndo_open and ndo_stop (%d)\n", r );
+		goto out;
+	}
+
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_open failed (%d)\n", r );
+	}
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_stop failed (%d)\n", r );
+	}
 
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+		dev_err( logdev, "nla_put_failure (%d)\n", r );
 		goto out;
 	}
 
 	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
 	if ( NULL == reply ) {
 		r = -ENOMEM;
-		dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+		dev_err( logdev, "nlmsg_new failed (%d)\n", r );
 		goto out;
-	}
+    }
 
-	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ASSOC_CNF );
-	if ( NULL == hdr ) {
-		r = -ENOBUFS;
-		goto free_reply;
-	}
-
-	r =
-		nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
-		nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
+	r = netdev->netdev_ops->ndo_open(netdev);
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
-		goto nla_put_failure;
+		dev_warn( logdev, "ndo_open failed (%d)\n", r );
 	}
 
-	genlmsg_end( reply, hdr );
+    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+    if ( NULL == reply ) {
+        r = -ENOMEM;
+        dev_err( logdev, "nlmsg_new failed (%d)\n", r );
+        goto out;
+    }
 
-	r = genlmsg_reply( reply, info );
-	goto out;
+    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ASSOC_CNF );
+    if ( NULL == hdr ) {
+        r = -ENOBUFS;
+        goto free_reply;
+    }
+
+    r =
+        nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
+        nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
+    if ( 0 != r ) {
+        dev_err( logdev, "nla_put_failure (%d)\n", r );
+        goto nla_put_failure;
+    }
+
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );
+    goto out;
 
 nla_put_failure:
 free_reply:
@@ -2027,12 +2055,13 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	rdev = info->user_ptr[0];
 	netdev = info->user_ptr[1];
 	wpan_dev = netdev->ieee802154_ptr;
-
-	if ( wpan_dev->netdev != netdev ) {
-		printk( KERN_INFO "netdev (%p) != wpan_dev->netdev (%p)\n", netdev, wpan_dev->netdev );
-	}
-
 	logdev = &netdev->dev;
+
+	if ( ! ( netdev->netdev_ops->ndo_open && netdev->netdev_ops->ndo_stop ) ) {
+		r = -ENOSYS;
+		dev_err( logdev, "missing at least 1 of required ndo_open and ndo_stop (%d)\n", r );
+		goto out;
+	}
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_CHANNEL ] &&
@@ -2107,10 +2136,20 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_stop failed (%d)\n", r );
+	}
+
+	r = rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
 	if ( 0 != r ) {
 		dev_err( logdev, "rdev_set_pan_id failed (%d)\n", r );
 		goto free_wrk;
+	}
+
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_open failed (%d)\n", r );
 	}
 
 	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
