@@ -1743,15 +1743,6 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 		goto out;
 	}
 
-	r = netdev->netdev_ops->ndo_open(netdev);
-	if ( 0 != r ) {
-		dev_warn( logdev, "ndo_open failed (%d)\n", r );
-	}
-	r = netdev->netdev_ops->ndo_stop(netdev);
-	if ( 0 != r ) {
-		dev_warn( logdev, "ndo_stop failed (%d)\n", r );
-	}
-
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
 		dev_err( logdev, "nla_put_failure (%d)\n", r );
@@ -2190,6 +2181,9 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	wait_for_completion( &wrk->completion );
+
+	netdev->netdev_ops->ndo_stop(netdev);
+	netdev->netdev_ops->ndo_open(netdev);
 
 	r = 0;
 	goto out;
