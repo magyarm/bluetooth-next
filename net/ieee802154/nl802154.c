@@ -60,7 +60,7 @@ struct work802154 {
 			u8 status;
 			u8 channel_page;
 			u32 scan_channels;
-			u8 scan_duration;
+			u32 scan_duration;
 			u8 result_list_size;
 			u32 current_channel;
 		} active_scan;
@@ -1515,7 +1515,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 
 	u8 channel_page;
 	u32 scan_channels;
-	u8 scan_duration;
+	u32 scan_duration;
 	u32 current_channel;
 	__le32 unscanned_channels;
 	struct sk_buff *reply;
@@ -1554,7 +1554,7 @@ static void nl802154_active_scan_cnf( struct work_struct *work )
 		//Send the beacon request
 		status = ieee802154_send_beacon_command_frame( netdev, IEEE802154_CMD_BEACON_REQ );
 		wrk->cmd_stuff.active_scan.current_channel = current_channel + 1;
-		status = schedule_delayed_work( &wrk->work, msecs_to_jiffies( a_base_superframe_duration * symbol_duration_us *( ( 1 << scan_duration)  + 1 ) * 1000 ) ) ? 0 : -EALREADY;
+		status = schedule_delayed_work( &wrk->work, usecs_to_jiffies( scan_duration ) ) ? 0 : -EALREADY;
 		if( 0 == status ) {
 			goto out;
 		}
@@ -1611,7 +1611,7 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 	u8 r;
 	u8 scan_type;
 	u32 scan_channels;
-	u8 scan_duration;
+	u32 scan_duration;
 	u8 channel_page;
 
 	struct cfg802154_registered_device *rdev;
@@ -1623,6 +1623,20 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 	rdev = info->user_ptr[0];
 	dev = &rdev->wpan_phy.dev;
 	netdev = info->user_ptr[1];
+
+	const u32 a_num_superframe_slots =
+			// 0 to 16, inclusive
+			16;
+	const u32 a_base_slot_duration =
+			// assuming that macBeaconOrder != 15 (i.e. no superframe)
+			60;
+	const u32 a_base_superframe_duration =
+			// 6.4.2, 802.15.4-2011
+			a_base_slot_duration * a_num_superframe_slots;
+	const u32 symbol_duration_us =
+			// 8.1.1, 802.15.4-2011
+			// typically 16 us for 2.4GHz DSS phy
+			rdev->wpan_phy.symbol_duration ? rdev->wpan_phy.symbol_duration : 16;
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_SCAN_TYPE ] &&
@@ -1636,7 +1650,7 @@ static int nl802154_active_scan_req( struct sk_buff *skb, struct genl_info *info
 
 	scan_type = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_TYPE ] );
 	scan_channels = nla_get_u32( info->attrs[ NL802154_ATTR_SUPPORTED_CHANNEL ] );
-	scan_duration = nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] );
+	scan_duration = a_base_superframe_duration * symbol_duration_us *( ( 1 << nla_get_u8( info->attrs[ NL802154_ATTR_SCAN_DURATION ] ) )  + 1 );
 	channel_page = nla_get_u8( info->attrs[ NL802154_ATTR_PAGE ] );
 
 	if ( channel_page > IEEE802154_MAX_PAGE ) {
