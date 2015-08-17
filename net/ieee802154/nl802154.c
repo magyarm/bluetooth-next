@@ -13,6 +13,8 @@
  * Based on: net/wireless/nl80211.c
  */
 
+#define DEBUG
+
 #include <linux/rtnetlink.h>
 
 #include <net/cfg802154.h>
@@ -20,6 +22,7 @@
 #include <net/mac802154.h>
 #include <net/netlink.h>
 #include <net/nl802154.h>
+#include <net/ieee802154_netdev.h>
 #include <net/sock.h>
 #include <net/ieee802154_netdev.h>
 
@@ -1700,49 +1703,51 @@ out:
 	return r;
 }
 
-enum {
-	MAC_ERR_SUCCESS,
-	MAC_ERR_PAN_AT_CAPACITY,
-	MAC_ERR_ACCESS_DENIED,
-	MAC_ERR_RESERVED = 0x7f,
-	MAC_ERR_CHANNEL_ACCESS_FAILURE,
-	MAC_ERR_NO_ACK,
-	MAC_ERR_NO_DATA,
-	MAC_ERR_COUNTER_ERROR,
-	MAC_ERR_FRAME_TOO_LONG,
-	MAC_ERR_IMPROPER_KEY_TYPE,
-	MAC_ERR_IMPROPER_SECURITY_LEVEL,
-	MAC_ERR_SECURITY_ERROR,
-	MAC_ERR_UNAVAILABLE_KEY,
-	MAC_ERR_UNSUPPORTED_LEGACY,
-	MAC_ERR_UNSUPPORTED_SECURITY,
-	MAC_ERR_INVALID_PARAMETER,
-};
-
 static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status )
 {
 	int r;
+
 	struct cfg802154_registered_device *rdev;
 	struct wpan_dev *wpan_dev;
-	struct net_device *dev;
+	struct net_device *netdev;
+	struct device *logdev;
 
 	struct sk_buff *reply;
 	void *hdr;
 
-	r = 0;
 	rdev = info->user_ptr[0];
-	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
-	dev = (struct net_device *) wpan_dev->netdev;
+	netdev = info->user_ptr[1];
+	wpan_dev = netdev->ieee802154_ptr;
+	logdev = &netdev->dev;
+
+	if ( ! ( netdev->netdev_ops->ndo_open && netdev->netdev_ops->ndo_stop ) ) {
+		r = -ENOSYS;
+		dev_err( logdev, "missing at least 1 of required ndo_open and ndo_stop (%d)\n", r );
+		goto out;
+	}
 
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+		dev_err( logdev, "nla_put_failure (%d)\n", r );
+		goto out;
+	}
+
+	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == reply ) {
+		r = -ENOMEM;
+		dev_err( logdev, "nlmsg_new failed (%d)\n", r );
 		goto out;
     }
+
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_open failed (%d)\n", r );
+	}
+
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
-        dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+        dev_err( logdev, "nlmsg_new failed (%d)\n", r );
         goto out;
     }
 
@@ -1756,7 +1761,7 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
         nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, assoc_short_address ) ||
         nla_put_u8( reply, NL802154_ATTR_ASSOC_STATUS, status );
     if ( 0 != r ) {
-        dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+        dev_err( logdev, "nla_put_failure (%d)\n", r );
         goto nla_put_failure;
     }
 
@@ -1767,9 +1772,9 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 
 nla_put_failure:
 free_reply:
-    nlmsg_free( reply );
+	nlmsg_free( reply );
 out:
-    return;
+	return;
 }
 
 static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
@@ -1799,7 +1804,7 @@ static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 
 	static const u16 assoc_short_address = IEEE802154_ADDR_BROADCAST;
-	static const u8 status = MAC_ERR_NO_DATA;
+	static const u8 status = IEEE802154_NO_DATA;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
@@ -1894,7 +1899,7 @@ out:
 }
 
 static int
-nl802154_assoc_send_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+nl802154_send_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 		u8 addr_mode, u16 coord_pan_id, u64 coord_addr,
 		u8 capability_information ){
 
@@ -2024,12 +2029,13 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	rdev = info->user_ptr[0];
 	netdev = info->user_ptr[1];
 	wpan_dev = netdev->ieee802154_ptr;
-
-	if ( wpan_dev->netdev != netdev ) {
-		printk( KERN_INFO "netdev (%p) != wpan_dev->netdev (%p)\n", netdev, wpan_dev->netdev );
-	}
-
 	logdev = &netdev->dev;
+
+	if ( ! ( netdev->netdev_ops->ndo_open && netdev->netdev_ops->ndo_stop ) ) {
+		r = -ENOSYS;
+		dev_err( logdev, "missing at least 1 of required ndo_open and ndo_stop (%d)\n", r );
+		goto out;
+	}
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_CHANNEL ] &&
@@ -2104,6 +2110,49 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
+	r = rdev_set_coord_addr_mode(rdev, wpan_dev, coord_addr_mode );
+	if ( 0 != r ) {
+		dev_err( logdev, "rdev_set_coord_addr_mode failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	switch( coord_addr_mode ) {
+	case IEEE802154_ADDR_SHORT:
+		r = rdev_set_coord_short_addr(rdev, wpan_dev, (__le16)coord_address );
+		if ( 0 != r ) {
+			dev_err( logdev, "rdev_set_coord_short_addr failed (%d)\n", r );
+			goto free_wrk;
+		}
+		break;
+	case IEEE802154_ADDR_LONG:
+		r = rdev_set_coord_extended_addr(rdev, wpan_dev, (__le64)coord_address );
+		if ( 0 != r ) {
+			dev_err( logdev, "rdev_set_coord_extended_addr failed (%d)\n", r );
+			goto free_wrk;
+		}
+		break;
+	default:
+		dev_err( logdev, "invalid address / mode combination\n" );
+		r = -EINVAL;
+		goto out;
+	}
+
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_stop failed (%d)\n", r );
+	}
+
+	r = rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
+	if ( 0 != r ) {
+		dev_err( logdev, "rdev_set_pan_id failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_open failed (%d)\n", r );
+	}
+
 	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
 		dev_err( logdev, "register assoc_req listener failed (%d)\n", r );
@@ -2113,14 +2162,14 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	dev_dbg( logdev, "channel_number: %u, channel_page: %u, coord_addr_mode: %u, coord_pan_id: 0x%04x, coord_address: %s, capability_information: 0x%02x, timeout_ms: %u\n",
 		channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_addr_str, capability_information, timeout_ms );
 
-	r = nl802154_assoc_send_assoc_req( &rdev->wpan_phy, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, capability_information );
+	r = nl802154_send_assoc_req( &rdev->wpan_phy, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, capability_information );
 	if ( 0 != r ) {
 		dev_err( logdev, "send assoc_req failed (%d)\n", r );
 		goto dereg_listener;
 	}
 
 	// XXX: <BEGIN SNIP>
-	// XXX: FIXME: This needs to be handled in the completion function via state machine, not here
+	// XXX: FIXME: This needs to be handled in the callback function via state machine, not here
 	msleep(50);
 
 	// XXX: define this function statically in this file.
@@ -2130,7 +2179,6 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		dev_err( logdev, "ack assoc_req failed (%d)\n", r );
 		goto dereg_listener;
 	}
-
 	// XXX: <END SNIP>
 
 	init_completion( &wrk->completion );
@@ -2142,6 +2190,9 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	wait_for_completion( &wrk->completion );
+
+	netdev->netdev_ops->ndo_stop(netdev);
+	netdev->netdev_ops->ndo_open(netdev);
 
 	r = 0;
 	goto out;
@@ -2375,8 +2426,9 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 	int r;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct net_device *netdev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = netdev->ieee802154_ptr;
+	struct device *logdev = &netdev->dev;
 
 	char device_addr_buf[32];
 	struct sk_buff *reply;
@@ -2391,7 +2443,7 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
 	if ( NULL == reply ) {
 		r = -ENOMEM;
-		dev_err( &dev->dev, "nlmsg_new failed (%d)\n", r );
+		dev_err( logdev, "nlmsg_new failed (%d)\n", r );
 		goto out;
 	}
 
@@ -2410,7 +2462,7 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 			( !is_extended_address( device_address ) && nla_put_u16( reply, NL802154_ATTR_SHORT_ADDR, (u16)device_address ) )
 		);
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
+		dev_err( logdev, "nla_put_failure (%d)\n", r );
 		goto nla_put_failure;
 	}
 
@@ -2418,7 +2470,7 @@ static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, 
 
 	r = genlmsg_reply( reply, info );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "genlmsg_reply failed (%d)\n", r );
+		dev_err( logdev, "genlmsg_reply failed (%d)\n", r );
 	}
 	goto out;
 
@@ -2426,6 +2478,11 @@ nla_put_failure:
 free_reply:
 	nlmsg_free( reply );
 out:
+
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_stop failed (%d)\n", r );
+	}
 	rdev_set_coord_addr_mode( rdev, wpan_dev, IEEE802154_ADDR_NONE );
 	rdev_set_coord_short_addr( rdev, wpan_dev, IEEE802154_ADDR_UNDEF );
 	rdev_set_coord_extended_addr( rdev, wpan_dev, IEEE802154_PANID_BROADCAST );
@@ -2433,7 +2490,112 @@ out:
 	rdev_set_addr_mode( rdev, wpan_dev, IEEE802154_ADDR_NONE );
 	rdev_set_short_addr( rdev, wpan_dev, IEEE802154_ADDR_UNDEF );
 	rdev_set_pan_id( rdev, wpan_dev, IEEE802154_PANID_BROADCAST );
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_warn( logdev, "ndo_open failed (%d)\n", r );
+	}
 	return;
+}
+
+
+static int
+nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+						u16 device_panid, u64 device_address,
+						u8 disassociate_reason, u8 tx_indirect)
+{
+	int r;
+
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, src_addr;
+	unsigned char *data;
+
+	struct net_device *netdev = wpan_dev->netdev;
+	struct device *logdev = &netdev->dev;
+
+	memset( &src_addr, 0, sizeof( src_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
+
+	hlen = 2 + 1 + 2; // Frame Control, Sequency Number, Destination PAN ID
+	hlen += IEEE802154_ADDR_LONG == wpan_dev->coord_addr_mode ? 8 : 2; // Destination Address
+	hlen += 0 + 8; // Source PAN ID, Source Address
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	dev_dbg( logdev, "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	dev_dbg( logdev, "Address of the netdev device structure: %p\n", wpan_dev->netdev );
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		r = -ENOMEM;
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	src_addr.mode = IEEE802154_ADDR_LONG;
+	src_addr.extended_addr = wpan_dev->extended_addr;
+
+	dst_addr.mode = wpan_dev->coord_addr_mode;
+	dst_addr.pan_id = wpan_dev->pan_id;
+
+	if ( IEEE802154_ADDR_SHORT == dst_addr.mode ){
+		dst_addr.short_addr = wpan_dev->coord_short_addr;
+	} else {
+		dst_addr.extended_addr = wpan_dev->coord_extended_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = true;
+	cb->intra_pan = true;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = src_addr;
+	cb->dest = dst_addr;
+
+	dev_dbg( logdev, "DSN value in wpan_dev: %p\n", &wpan_dev->dsn);
+
+	dev_dbg( logdev, "Dest addr: 0x%04x\n", dst_addr.short_addr );
+	dev_dbg( logdev, "Dest addr long: 0x%016" PRIx64 "\n", dst_addr.extended_addr );
+	dev_dbg( logdev, "Src addr: 0x%04x\n", src_addr.short_addr );
+	dev_dbg( logdev, "Src addr long: 0x%016" PRIx64 "\n", src_addr.extended_addr );
+
+	netdev->header_ops->create( skb, netdev, ETH_P_IEEE802154, &dst_addr, &src_addr, hlen + tlen + size);
+
+	dev_dbg( logdev, "Header is created");
+
+	//Add the mac header to the data
+	memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_DISASSOCIATION_NOTIFY;
+	data[1] = disassociate_reason;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	dev_dbg( logdev, "Data bytes sent out %x, %x\n",data[0], data[1]);
+
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	dev_dbg( logdev, "r value is %x\n", r );
+	if( 0 == r) {
+		goto error;
+	}
+
+	r = 0;
+	goto out;
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
 }
 
 static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) {
@@ -2445,16 +2607,17 @@ static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) 
 	struct sk_buff *skb_out = wrk->skb;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct net_device *netdev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = netdev->ieee802154_ptr;
+	struct device *logdev = &netdev->dev;
 
-	u8 status = MAC_ERR_NO_DATA;
+	u8 status = IEEE802154_SUCCESS;
 
-	dev_info( &dev->dev, "%s\n", __FUNCTION__ );
+	dev_info( logdev, "%s()\n", __FUNCTION__ );
 
 	cancel_delayed_work( &wrk->work );
 
-	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, work );
+	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, arg );
 
 	nl802154_disassoc_cnf( skb_out, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
 
@@ -2464,7 +2627,7 @@ static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) 
 
 static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 
-	static const u8 status = MAC_ERR_NO_ACK;
+	static const u8 status = IEEE802154_NO_ACK;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
@@ -2472,10 +2635,11 @@ static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 	struct sk_buff *skb_out = wrk->skb;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct net_device *netdev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = netdev->ieee802154_ptr;
+	struct device *logdev = &netdev->dev;
 
-	dev_err( &dev->dev, "%s\n", __FUNCTION__ );
+	dev_info( logdev, "%s()\n", __FUNCTION__ );
 
 	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, (void *)work );
 
@@ -2502,8 +2666,9 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 //	u32 key_index;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct net_device *netdev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = netdev->ieee802154_ptr;
+	struct device *logdev = &netdev->dev;
 
 	struct work802154 *wrk;
 
@@ -2518,7 +2683,7 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 		info->attrs[ NL802154_ATTR_DISASSOC_TX_INDIRECT ] &&
 		info->attrs[ NL802154_ATTR_DISASSOC_TIMEOUT_MS ]
 	) ) {
-		dev_err( &dev->dev, "invalid arguments\n" );
+		dev_err( logdev, "invalid arguments\n" );
 		r = -EINVAL;
 		goto out;
 	}
@@ -2546,6 +2711,18 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	tx_indirect = nla_get_u8( info->attrs[ NL802154_ATTR_DISASSOC_TX_INDIRECT ] );
 	timeout_ms = nla_get_u16( info->attrs[ NL802154_ATTR_DISASSOC_TIMEOUT_MS ] );
 
+	// sanity checks
+	if ( wpan_dev->pan_id != device_panid ) {
+		dev_err( logdev, "invalid PAN ID 0x%04x\n", device_panid );
+		r = -EINVAL;
+		goto out;
+	}
+	if ( ! ( wpan_dev->extended_addr == device_address || wpan_dev->short_addr == (u16)device_address ) ) {
+		dev_err( logdev, "invalid device_address 0x%016" PRIx64 "\n", (u64) device_address );
+		r = -EINVAL;
+		goto out;
+	}
+
 	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
 	if ( NULL == wrk ) {
 		r = -ENOMEM;
@@ -2558,28 +2735,46 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	wrk->cmd_stuff.disassoc.device_panid = device_panid;
 	wrk->cmd_stuff.disassoc.device_address = device_address;
 
+#if 0
+	// XXX: ATUSB hardware does not propogate ACK packets up via USB.
+	// XXX: This may be something correctable just via setting ATRF registers
+	// XXX: but it might require modifying the ATMega firmware.
+	// XXX: What is kind of short-sighted about this design, is that the hardware
+	// XXX: does not report when an ACK is _not_ received to the host...
+
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_disassoc_req_timeout );
 
-	r = rdev_register_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, wrk );
+	r = rdev_register_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "rdev_register_disassoc_listener failed (%d)\n", r );
+		dev_err( logdev, "rdev_register_disassoc_listener failed (%d)\n", r );
 		goto free_wrk;
 	}
 
-	r = rdev_disassoc_req( rdev, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
+	r = nl802154_send_disassoc_req( &rdev->wpan_phy, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "rdev_disassoc_req failed (%d)\n", r );
+		dev_err( logdev, "rdev_disassoc_req failed (%d)\n", r );
 		goto dereg_listener;
 	}
 
 	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "schedule_delayed_work failed (%d)\n", r );
+		dev_err( logdev, "schedule_delayed_work failed (%d)\n", r );
 		goto dereg_listener;
 	}
 
 	wait_for_completion( &wrk->completion );
+#else
+
+	r = nl802154_send_disassoc_req( &rdev->wpan_phy, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
+	if ( 0 != r ) {
+		dev_err( logdev, "rdev_disassoc_req failed (%d)\n", r );
+		goto dereg_listener;
+	}
+
+	nl802154_disassoc_cnf( skb, info, IEEE802154_SUCCESS, device_panid, device_address );
+
+#endif
 
 	r = 0;
 	goto out;

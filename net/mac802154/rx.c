@@ -100,10 +100,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	sdata->dev->stats.rx_packets++;
 	sdata->dev->stats.rx_bytes += skb->len;
 
+	printk( KERN_INFO "Received %d Frame\n", hdr->fc.type);
+
 	switch (hdr->fc.type) {
-	case IEEE802154_FC_TYPE_DATA:
-		dev_dbg( &wpan_dev->netdev->dev, "Received Data Frame Control");
-		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_BEACON:
 		if( sdata->local->active_scan_callback && sdata->local->active_scan_arg ) {
 			sdata->local->active_scan_callback( skb, hdr, sdata->local->active_scan_arg );
@@ -114,9 +113,34 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 			return 0;
 		}
 		goto fail;
+	case IEEE802154_FC_TYPE_DATA:
+		dev_dbg( &wpan_dev->netdev->dev, "Received Data Frame Control");
+		return ieee802154_deliver_skb(skb);
+	case IEEE802154_FC_TYPE_ACK:
+
+		// XXX: All packets transmitted that require an ACK should have an
+		// XXX: expected_ack structure (seq #, callback, priv_data) entered
+		// XXX: into a linked list (or some collection). Either a timeout or
+		// XXX: an incoming ACK should remove the expected_ack structure from
+		// XXX: the linked list and subsequently report whether or not the
+		// XXX: packet was successfully ACK'ed.
+		//
+		// XXX: I'm sure none of this is really new within the Linux kernel's
+		// XXX: networking stack(s). Existing code should be reused and
+		// XXX: 802.15.4-specific functionality can probably be shoehorned in.
+
+		if ( sdata->local->disassoc_req_callback ) {
+			sdata->local->disassoc_req_callback( skb, sdata->local->disassoc_req_arg );
+			return 0;
+		}
+		goto fail;
 	case IEEE802154_FC_TYPE_MAC_CMD:
-		if( 0x2 == skb->data[0] ){
-			if ( sdata->local->assoc_req_callback ){
+		if( IEEE802154_CMD_ASSOCIATION_RESP == skb->data[0] ) {
+			if ( sdata->local->assoc_req_callback ) {
+				// XXX: the callback should be changed to return either HANDLED or IGNORED
+				// XXX: as association needs to hear about ACK and DATA packets
+				// XXX: the handler should also potentially be called for DATA packets
+				// XXX: (see Figure 18—Message sequence chart for association, 2011 ieee spec)
 				sdata->local->assoc_req_callback( skb, sdata->local->assoc_req_arg );
 				return 0;
 			}
