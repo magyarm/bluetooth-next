@@ -320,7 +320,7 @@ struct ieee802154_beacon_indication {
 	struct {
 		u8 src_addr_mode;          /* enumeration:  SHORT_ADDR, EXTENDED_ADDR   */
 		u16 src_pan_id;            /* Integer    :  0x0000 -- 0xffff            */
-		u32 src_addr;              /* type?      :  range ?                     */
+		u64 src_addr;              /* type?      :  range ?                     */
 		u8 channel_num;            /* integer    :  11 - 27?                    */
 		u8 channel_page;           /* integer    :  range ?                     */
 		u8 superframe_spec;        /* bitfield   :                              */
